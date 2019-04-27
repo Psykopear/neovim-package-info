@@ -17,8 +17,7 @@ pub trait Store {
     fn get_name(&self) -> &String;
 }
 
-// Crates.io
-struct Cratesio {
+pub struct Cratesio {
     pub name: String,
     pub base_url: String,
 }
@@ -26,7 +25,7 @@ struct Cratesio {
 impl Store for Cratesio {
     fn new() -> Self {
         Self {
-            name: "crates io".to_string(),
+            name: "crates.io".to_string(),
             base_url: "https://crates.io/api/v1/crates/{package}".to_string(),
         }
     }
@@ -41,12 +40,14 @@ impl Store for Cratesio {
 
     fn get_max_version(&self, package: &str) -> Result<String, Box<std::error::Error>> {
         let body = self.get_package_info(package)?;
-        Ok(body["crate"]["max_version"].to_string())
+        let max_version = body["crate"]["max_version"]
+            .as_str()
+            .expect("Can't find version");
+        Ok(max_version.to_string())
     }
 }
 
-// Pypi
-struct Pypi {
+pub struct Pypi {
     pub name: String,
     pub base_url: String,
 }
@@ -54,7 +55,7 @@ struct Pypi {
 impl Store for Pypi {
     fn new() -> Self {
         Self {
-            name: "pypi".to_string(),
+            name: "pypi.org".to_string(),
             base_url: "https://pypi.org/pypi/{package}/json".to_string(),
         }
     }
@@ -73,8 +74,7 @@ impl Store for Pypi {
     }
 }
 
-// NPM
-struct Npm {
+pub struct Npm {
     pub name: String,
     pub base_url: String,
 }
@@ -82,7 +82,7 @@ struct Npm {
 impl Store for Npm {
     fn new() -> Self {
         Self {
-            name: "npm".to_string(),
+            name: "npmjs.org".to_string(),
             base_url: "https://registry.npmjs.org/{package}".to_string(),
         }
     }
