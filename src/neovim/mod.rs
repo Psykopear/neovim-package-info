@@ -51,10 +51,10 @@ impl EventHandler {
         }
     }
 
-    fn set_text(&mut self, message: &str) {
+    fn set_text(&mut self, message: &str, line_number: i64) {
         if let Ok(buffer) = self.nvim.get_current_buf() {
             let chunks: Vec<Value> = vec![vec![Value::from(message)].into()];
-            match buffer.set_virtual_text(&mut self.nvim, 0, 0, chunks, vec![]) {
+            match buffer.set_virtual_text(&mut self.nvim, 0, line_number, chunks, vec![]) {
                 Ok(_) => (),
                 Err(error) => self.echo(&format!("{}", error)),
             }
@@ -75,14 +75,14 @@ impl EventHandler {
         if let Ok(requirement) = Version::parse(dependency.req()) {
             if let Ok(store_version) = store.get_max_version(name) {
                 if let Ok(latest_version) = Version::parse(&store_version) {
-                    if requirement.major < latest_version.major {
-                        format!("{} = {}  RED {}", name, requirement, latest_version)
-                    } else if requirement.minor < latest_version.minor {
-                        format!("{} = {}  YELLOW {}", name, requirement, latest_version)
-                    } else if requirement.patch < latest_version.patch {
-                        format!("{} = {}  GREEN {}", name, requirement, latest_version)
+                    if latest_version.major > requirement.major {
+                        format!("  RED {}", latest_version)
+                    } else if latest_version.minor > requirement.minor {
+                        format!("  YELLOW {}", latest_version)
+                    } else if latest_version.patch > requirement.patch {
+                        format!("  GREEN {}", latest_version)
                     } else {
-                        format!("{} = {}  RED {}", name, requirement, latest_version)
+                        format!("  {}", latest_version)
                     }
                 } else {
                     format!("Error parsing store version {}", store_version)
@@ -105,9 +105,15 @@ impl EventHandler {
                     let content = fs::read_to_string(file_path).expect("Can't read to string");
                     let cargo_toml = Manifest::from_str(&content).expect("Can't parse cargo toml");
                     for (name, dependency) in cargo_toml.dependencies {
+                        let mut line_number = 0;
+                        for (index, line) in content.split("\n").enumerate() {
+                            if line.to_string().starts_with(&format!("{} = ", name)) {
+                                line_number = index
+                            }
+                        }
                         let res = self.check_dependency(&name, &dependency, &self.cratesio);
                         self.echo(&res);
-                        self.set_text(&res);
+                        self.set_text(&res, line_number as i64);
                     }
                     for (name, dependency) in cargo_toml.dev_dependencies {
                         let res = self.check_dependency(&name, &dependency, &self.cratesio);
