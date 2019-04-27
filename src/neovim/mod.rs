@@ -51,6 +51,16 @@ impl EventHandler {
         }
     }
 
+    fn set_text(&mut self, message: &str) {
+        if let Ok(buffer) = self.nvim.get_current_buf() {
+            let chunks: Vec<Value> = vec![vec![Value::from(message)].into()];
+            match buffer.set_virtual_text(&mut self.nvim, 0, 0, chunks, vec![]) {
+                Ok(_) => (),
+                Err(error) => self.echo(&format!("{}", error)),
+            }
+        }
+    }
+
     fn echo(&mut self, message: &str) {
         self.nvim.command(&format!("echo \"{}\"", message)).unwrap();
     }
@@ -61,19 +71,27 @@ impl EventHandler {
             .unwrap();
     }
 
-    fn check_dependency<T: Store>(
-        &self,
-        name: &str,
-        dependency: &Dependency,
-        store: &T,
-    ) -> Result<String, Box<std::error::Error>> {
-        let requirement = VersionReq::parse(dependency.req())?;
-        let latest_version = store.get_max_version(name)?;
-        let latest_version = Version::parse(&latest_version)?;
-        if requirement.matches(&latest_version) {
-            Ok(format!("{} matches {}", name, requirement))
+    fn check_dependency<T: Store>(&self, name: &str, dependency: &Dependency, store: &T) -> String {
+        if let Ok(requirement) = Version::parse(dependency.req()) {
+            if let Ok(store_version) = store.get_max_version(name) {
+                if let Ok(latest_version) = Version::parse(&store_version) {
+                    if requirement.major < latest_version.major {
+                        format!("{} = {}  RED {}", name, requirement, latest_version)
+                    } else if requirement.minor < latest_version.minor {
+                        format!("{} = {}  YELLOW {}", name, requirement, latest_version)
+                    } else if requirement.patch < latest_version.patch {
+                        format!("{} = {}  GREEN {}", name, requirement, latest_version)
+                    } else {
+                        format!("{} = {}  RED {}", name, requirement, latest_version)
+                    }
+                } else {
+                    format!("Error parsing store version {}", store_version)
+                }
+            } else {
+                format!("Error getting store version for {}", name)
+            }
         } else {
-            Ok(format!("{} does not match {}", name, requirement))
+            format!("Error parsing {}", name)
         }
     }
 
@@ -87,21 +105,16 @@ impl EventHandler {
                     let content = fs::read_to_string(file_path).expect("Can't read to string");
                     let cargo_toml = Manifest::from_str(&content).expect("Can't parse cargo toml");
                     for (name, dependency) in cargo_toml.dependencies {
-                        let res = self
-                            .check_dependency(&name, &dependency, &self.cratesio)
-                            .expect("Error checking dependency");
+                        let res = self.check_dependency(&name, &dependency, &self.cratesio);
                         self.echo(&res);
+                        self.set_text(&res);
                     }
                     for (name, dependency) in cargo_toml.dev_dependencies {
-                        let res = self
-                            .check_dependency(&name, &dependency, &self.cratesio)
-                            .expect("Error checking dependency");
+                        let res = self.check_dependency(&name, &dependency, &self.cratesio);
                         self.echo(&res);
                     }
                     for (name, dependency) in cargo_toml.build_dependencies {
-                        let res = self
-                            .check_dependency(&name, &dependency, &self.cratesio)
-                            .expect("Error checking dependency");
+                        let res = self.check_dependency(&name, &dependency, &self.cratesio);
                         self.echo(&res);
                     }
                 }
