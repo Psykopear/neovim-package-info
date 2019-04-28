@@ -1,4 +1,4 @@
-use crate::parser::parse_cargo_toml;
+use crate::parser::{parse_cargo_toml, parse_package_json};
 use crate::store::{Cratesio, Npm, Pypi, Store};
 
 use neovim_lib::{Neovim, NeovimApi, Session, Value};
@@ -144,8 +144,53 @@ impl EventHandler {
                     self.echo(file_path);
                 }
                 Messages::PackageJson => {
+                    self.echo("CIAO");
                     let file_path = &parse_string(&args[0]).expect("File path not received!");
-                    self.echo(file_path);
+                    let content = fs::read_to_string(file_path).expect("Can't read to string");
+                    let package_json =
+                        parse_package_json(&content).expect("Can't parse package json");
+
+                    // Concatenate all dependencie so we can parallelize network calls
+                    let dependencies = package_json
+                        .dependencies
+                        .iter()
+                        .chain(package_json.dev_dependencies.iter());
+
+                    // First find the line number of each requirement and set a
+                    // waiting message as virtual text
+                    for dep in dependencies {
+                        let mut line_number = 0;
+                        for (index, line) in content.split("\n").enumerate() {
+                            if line.to_string().contains(&format!("\"{}\": \"", dep.0)) {
+                                line_number = index
+                            }
+                        }
+                        self.set_text(
+                            &vec![("...".to_string(), "Comment".to_string())],
+                            line_number as i64,
+                        );
+                    }
+
+                    let dependencies: Vec<(String, Vec<(String, String)>)> = package_json
+                        .dependencies
+                        .par_iter()
+                        .chain(package_json.dev_dependencies.par_iter())
+                        .map(|(name, dependency)| {
+                            (
+                                name.to_string(),
+                                self.npm.check_dependency(&name, &dependency),
+                            )
+                        })
+                        .collect();
+                    for (name, messages) in dependencies {
+                        let mut line_number = 0;
+                        for (index, line) in content.split("\n").enumerate() {
+                            if line.to_string().contains(&format!("\"{}\": \"", name)) {
+                                line_number = index
+                            }
+                        }
+                        self.set_text(&messages, line_number as i64);
+                    }
                 }
                 Messages::Unknown(event) => {
                     self.echo(&format!("Unkown command: {}, args: {:?}", event, args));
