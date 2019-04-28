@@ -2,7 +2,7 @@ use crate::fetcher::{Cratesio, Npm, Pypi, Store};
 use cargo_toml::{Dependency, Manifest};
 use neovim_lib::{Neovim, NeovimApi, Session, Value};
 use rayon::prelude::*;
-use semver::Version;
+use semver::{Version, VersionReq};
 use std::fs;
 
 pub fn parse_string(value: &Value) -> Result<String, String> {
@@ -29,6 +29,8 @@ impl From<String> for Messages {
         }
     }
 }
+
+static PREFIX: &str = "  ¤ ";
 
 struct EventHandler {
     nvim: Neovim,
@@ -81,12 +83,12 @@ impl EventHandler {
         dependency: &Dependency,
         store: &T,
     ) -> Vec<(String, String)> {
-        if let Ok(requirement) = Version::parse(dependency.req()) {
-            if let Ok(store_version) = store.get_max_version(name) {
-                if let Ok(latest_version) = Version::parse(&store_version) {
+        if let Ok(store_version) = store.get_max_version(name) {
+            if let Ok(latest_version) = Version::parse(&store_version) {
+                if let Ok(requirement) = Version::parse(dependency.req()) {
                     if latest_version.major > requirement.major {
                         vec![
-                            ("  => ".to_string(), "Comment".to_string()),
+                            (PREFIX.to_string(), "Comment".to_string()),
                             (format!("{}", latest_version), "Error".to_string()),
                         ]
                     } else if latest_version.minor > requirement.minor {
@@ -96,7 +98,7 @@ impl EventHandler {
                             .map(|x| x.to_string())
                             .collect();
                         vec![
-                            ("  => ".to_string(), "Comment".to_string()),
+                            (PREFIX.to_string(), "Comment".to_string()),
                             (format!("{}.", split[0]).to_string(), "Comment".to_string()),
                             (split[1..].join("."), "Number".to_string()),
                         ]
@@ -107,7 +109,7 @@ impl EventHandler {
                             .map(|x| x.to_string())
                             .collect();
                         vec![
-                            ("  => ".to_string(), "Comment".to_string()),
+                            (PREFIX.to_string(), "Comment".to_string()),
                             (
                                 format!("{}.", split[..2].join(".")).to_string(),
                                 "Comment".to_string(),
@@ -115,23 +117,40 @@ impl EventHandler {
                             (split[2..].join("."), "String".to_string()),
                         ]
                     } else {
-                        vec![(format!("  => {}", latest_version), "Comment".to_string())]
+                        vec![(
+                            format!("{}{}", PREFIX, latest_version),
+                            "Comment".to_string(),
+                        )]
                     }
                 } else {
-                    vec![(
-                        format!("  => Error parsing store version {}", store_version),
-                        "Comment".to_string(),
-                    )]
+                    if let Ok(requirement) = VersionReq::parse(dependency.req()) {
+                        if requirement.matches(&latest_version) {
+                            vec![
+                                (PREFIX.to_string(), "Comment".to_string()),
+                                (format!("{}", latest_version), "String".to_string()),
+                            ]
+                        } else {
+                            vec![
+                                (PREFIX.to_string(), "Comment".to_string()),
+                                (format!("{}", latest_version), "Number".to_string()),
+                            ]
+                        }
+                    } else {
+                        vec![(
+                            format!("{}{}", PREFIX, latest_version),
+                            "Comment".to_string(),
+                        )]
+                    }
                 }
             } else {
                 vec![(
-                    format!("  => Error getting store version for {}", name),
+                    format!("{}Error parsing store version {}", PREFIX, store_version),
                     "Comment".to_string(),
                 )]
             }
         } else {
             vec![(
-                format!("  => Error parsing {}", name),
+                format!("{}Error getting store version for {}", PREFIX, name),
                 "Comment".to_string(),
             )]
         }
@@ -160,7 +179,7 @@ impl EventHandler {
                             }
                         }
                         self.set_text(
-                            &vec![("  => Loading...".to_string(), "Comment".to_string())],
+                            &vec![(format!("{}...", PREFIX), "Comment".to_string())],
                             line_number as i64,
                         );
                     }
