@@ -1,4 +1,6 @@
 use crate::fetcher::{Cratesio, Npm, Pypi, Store};
+use crate::parser::parse_cargo_toml;
+
 use cargo_toml::{Dependency, Manifest};
 use neovim_lib::{Neovim, NeovimApi, Session, Value};
 use rayon::prelude::*;
@@ -30,7 +32,7 @@ impl From<String> for Messages {
     }
 }
 
-static PREFIX: &str = "  ¤ ";
+static PREFIX: &str = "  -> ";
 
 struct EventHandler {
     nvim: Neovim,
@@ -100,7 +102,7 @@ impl EventHandler {
                         vec![
                             (PREFIX.to_string(), "Comment".to_string()),
                             (format!("{}.", split[0]).to_string(), "Comment".to_string()),
-                            (split[1..].join("."), "Number".to_string()),
+                            (split[1..].join("."), "Directory".to_string()),
                         ]
                     } else if latest_version.patch > requirement.patch {
                         let split: Vec<String> = latest_version
@@ -127,7 +129,7 @@ impl EventHandler {
                         if requirement.matches(&latest_version) {
                             vec![
                                 (PREFIX.to_string(), "Comment".to_string()),
-                                (format!("{}", latest_version), "String".to_string()),
+                                (format!("{}", latest_version), "Comment".to_string()),
                             ]
                         } else {
                             vec![
@@ -164,7 +166,7 @@ impl EventHandler {
                 Messages::CargoToml => {
                     let file_path = &parse_string(&args[0]).expect("File path not received!");
                     let content = fs::read_to_string(file_path).expect("Can't read to string");
-                    let cargo_toml = Manifest::from_str(&content).expect("Can't parse cargo toml");
+                    let cargo_toml = parse_cargo_toml(&content).expect("Can't parse cargo toml");
 
                     let dependencies = cargo_toml
                         .dependencies

@@ -16,7 +16,7 @@ name = "name"
 path = "src/main.rs"
 
 [build-dependencies]
-clap = "2.32.0"
+clap = "1.0.0"
 version_check = "0.1.3"
 
 [dependencies]

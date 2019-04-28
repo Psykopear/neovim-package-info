@@ -100,22 +100,3 @@ impl Store for Npm {
         Ok(body["dist-tags"]["latest"].to_string())
     }
 }
-
-fn test_single_store<T: Store>(store: T, package: &str) -> Result<(), Box<std::error::Error>> {
-    let max_version = store.get_max_version(&package)?;
-    let name = store.get_name();
-    println!("Max {} version on {}: {}", package, name, max_version);
-    Ok(())
-}
-
-fn test_stores() -> Result<(), Box<std::error::Error>> {
-    test_single_store(Cratesio::new(), "reqwest")?;
-    test_single_store(Pypi::new(), "requests")?;
-    test_single_store(Npm::new(), "axios")?;
-    Ok(())
-}
-
-pub fn test() -> Result<(), Box<std::error::Error>> {
-    test_stores()?;
-    Ok(())
-}
