@@ -1,4 +1,4 @@
-use crate::parser::{parse_cargo_toml, parse_package_json};
+use crate::parser::{parse_cargo_toml, parse_package_json, parse_pipfile};
 use crate::store::{Cratesio, Npm, Pypi, Store};
 
 use neovim_lib::{Neovim, NeovimApi, Session, Value};
@@ -141,10 +141,56 @@ impl EventHandler {
                 }
                 Messages::Pipfile => {
                     let file_path = &parse_string(&args[0]).expect("File path not received!");
+                    let content = fs::read_to_string(file_path).expect("Can't read to string");
+                    let pipfile = parse_pipfile(&content);
+                    match pipfile {
+                        Err(error) => self.echo(&error.to_string()),
+                        _ => (),
+                    }
+                    let pipfile = parse_pipfile(&content).expect("ASD");
+
+                    // Concatenate all dependencie so we can parallelize network calls
+                    let dependencies = pipfile
+                        .dependencies
+                        .iter()
+                        .chain(pipfile.dev_dependencies.iter());
+
+                    // First find the line number of each requirement and set a
+                    // waiting message as virtual text
+                    for dep in dependencies {
+                        let mut line_number = 0;
+                        for (index, line) in content.split("\n").enumerate() {
+                            if line.to_string().starts_with(&format!("{} = ", dep.0)) {
+                                line_number = index
+                            }
+                        }
+                        self.set_text(
+                            &vec![("...".to_string(), "Comment".to_string())],
+                            line_number as i64,
+                        );
+                    }
+
+                    let dependencies: Vec<(String, Vec<(String, String)>)> = pipfile
+                        .dependencies
+                        .par_iter()
+                        .chain(pipfile.dev_dependencies.par_iter())
+                        .map(|(name, dependency)| {
+                            let req = format!("{:?}", dependency);
+                            (name.to_string(), self.pypi.check_dependency(&name, &req))
+                        })
+                        .collect();
+                    for (name, messages) in dependencies {
+                        let mut line_number = 0;
+                        for (index, line) in content.split("\n").enumerate() {
+                            if line.to_string().starts_with(&format!("{} = ", name)) {
+                                line_number = index
+                            }
+                        }
+                        self.set_text(&messages, line_number as i64);
+                    }
                     self.echo(file_path);
                 }
                 Messages::PackageJson => {
-                    self.echo("CIAO");
                     let file_path = &parse_string(&args[0]).expect("File path not received!");
                     let content = fs::read_to_string(file_path).expect("Can't read to string");
                     let package_json =
