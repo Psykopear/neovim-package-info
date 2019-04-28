@@ -1,11 +1,11 @@
-use crate::fetcher::{Cratesio, Npm, Pypi, Store};
 use crate::parser::parse_cargo_toml;
+use crate::store::{Cratesio, Npm, Pypi, Store};
 
-use cargo_toml::{Dependency, Manifest};
 use neovim_lib::{Neovim, NeovimApi, Session, Value};
 use rayon::prelude::*;
-use semver::{Version, VersionReq};
 use std::fs;
+
+static PREFIX: &str = "  -> ";
 
 pub fn parse_string(value: &Value) -> Result<String, String> {
     value
@@ -32,8 +32,6 @@ impl From<String> for Messages {
     }
 }
 
-static PREFIX: &str = "  -> ";
-
 struct EventHandler {
     nvim: Neovim,
     cratesio: Cratesio,
@@ -58,7 +56,7 @@ impl EventHandler {
 
     fn set_text(&mut self, messages: &Vec<(String, String)>, line_number: i64) {
         if let Ok(buffer) = self.nvim.get_current_buf() {
-            let chunks: Vec<Value> = messages
+            let mut chunks: Vec<Value> = messages
                 .iter()
                 .map(|(message, highlight)| {
                     vec![
@@ -68,6 +66,14 @@ impl EventHandler {
                     .into()
                 })
                 .collect();
+            chunks.insert(
+                0,
+                vec![
+                    Value::from(format!("{}", PREFIX)),
+                    Value::from("Comment".to_string()),
+                ]
+                .into(),
+            );
             match buffer.set_virtual_text(&mut self.nvim, 0, line_number, chunks, vec![]) {
                 Ok(_) => (),
                 Err(error) => self.echo(&format!("{}", error)),
@@ -77,85 +83,6 @@ impl EventHandler {
 
     fn echo(&mut self, message: &str) {
         self.nvim.command(&format!("echo \"{}\"", message)).unwrap();
-    }
-
-    fn check_dependency<T: Store>(
-        &self,
-        name: &str,
-        dependency: &Dependency,
-        store: &T,
-    ) -> Vec<(String, String)> {
-        if let Ok(store_version) = store.get_max_version(name) {
-            if let Ok(latest_version) = Version::parse(&store_version) {
-                if let Ok(requirement) = Version::parse(dependency.req()) {
-                    if latest_version.major > requirement.major {
-                        vec![
-                            (PREFIX.to_string(), "Comment".to_string()),
-                            (format!("{}", latest_version), "Error".to_string()),
-                        ]
-                    } else if latest_version.minor > requirement.minor {
-                        let split: Vec<String> = latest_version
-                            .to_string()
-                            .split('.')
-                            .map(|x| x.to_string())
-                            .collect();
-                        vec![
-                            (PREFIX.to_string(), "Comment".to_string()),
-                            (format!("{}.", split[0]).to_string(), "Comment".to_string()),
-                            (split[1..].join("."), "Directory".to_string()),
-                        ]
-                    } else if latest_version.patch > requirement.patch {
-                        let split: Vec<String> = latest_version
-                            .to_string()
-                            .split('.')
-                            .map(|x| x.to_string())
-                            .collect();
-                        vec![
-                            (PREFIX.to_string(), "Comment".to_string()),
-                            (
-                                format!("{}.", split[..2].join(".")).to_string(),
-                                "Comment".to_string(),
-                            ),
-                            (split[2..].join("."), "String".to_string()),
-                        ]
-                    } else {
-                        vec![(
-                            format!("{}{}", PREFIX, latest_version),
-                            "Comment".to_string(),
-                        )]
-                    }
-                } else {
-                    if let Ok(requirement) = VersionReq::parse(dependency.req()) {
-                        if requirement.matches(&latest_version) {
-                            vec![
-                                (PREFIX.to_string(), "Comment".to_string()),
-                                (format!("{}", latest_version), "Comment".to_string()),
-                            ]
-                        } else {
-                            vec![
-                                (PREFIX.to_string(), "Comment".to_string()),
-                                (format!("{}", latest_version), "Number".to_string()),
-                            ]
-                        }
-                    } else {
-                        vec![(
-                            format!("{}{}", PREFIX, latest_version),
-                            "Comment".to_string(),
-                        )]
-                    }
-                }
-            } else {
-                vec![(
-                    format!("{}Error parsing store version {}", PREFIX, store_version),
-                    "Comment".to_string(),
-                )]
-            }
-        } else {
-            vec![(
-                format!("{}Error getting store version for {}", PREFIX, name),
-                "Comment".to_string(),
-            )]
-        }
     }
 
     fn recv(&mut self) {
@@ -168,11 +95,15 @@ impl EventHandler {
                     let content = fs::read_to_string(file_path).expect("Can't read to string");
                     let cargo_toml = parse_cargo_toml(&content).expect("Can't parse cargo toml");
 
+                    // Concatenate all dependencie so we can parallelize network calls
                     let dependencies = cargo_toml
                         .dependencies
                         .iter()
                         .chain(cargo_toml.dev_dependencies.iter())
                         .chain(cargo_toml.build_dependencies.iter());
+
+                    // First find the line number of each requirement and set a
+                    // waiting message as virtual text
                     for dep in dependencies {
                         let mut line_number = 0;
                         for (index, line) in content.split("\n").enumerate() {
@@ -181,7 +112,7 @@ impl EventHandler {
                             }
                         }
                         self.set_text(
-                            &vec![(format!("{}...", PREFIX), "Comment".to_string())],
+                            &vec![("...".to_string(), "Comment".to_string())],
                             line_number as i64,
                         );
                     }
@@ -194,7 +125,7 @@ impl EventHandler {
                         .map(|(name, dependency)| {
                             (
                                 name.to_string(),
-                                self.check_dependency(&name, &dependency, &self.cratesio),
+                                self.cratesio.check_dependency(&name, &dependency.req()),
                             )
                         })
                         .collect();
