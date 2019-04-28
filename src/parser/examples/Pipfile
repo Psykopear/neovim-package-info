@@ -1,0 +1,55 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+channels = "*"
+daphne = "*"
+graphene-django = "*"
+psycopg2-binary = "*"
+requests = "*"
+django-environ = "*"
+google-cloud-logging = "*"
+channels_redis = "*"
+Django = "*"
+django-import-export = "*"
+django-cors-headers = "*"
+django-filter = "*"
+django-storages = {version = "*",extras = ["google"]}
+aiohttp = "*"
+django-allauth = "*"
+lxml = "*"
+pillow = "*"
+django-anymail = {extras = ["mailgun"]}
+whitenoise = {extras = ["brotli"]}
+wagtail = "*"
+django-money = "*"
+"geoip2" = "*"
+django-ipware = "*"
+sorl-thumbnail = "*"
+redis = "*"
+django-choices = "*"
+arrow = "*"
+ddtrace = "*"
+google-cloud-storage = "*"
+paypalrestsdk = "==2.0.0rc2"
+service-identity = "*"
+python-json-logger = "*"
+django-debug-toolbar = "*"
+
+[requires]
+python_version = "3.7"
+
+[dev-packages]
+factory-boy = "*"
+jedi = "*"
+pytest = "*"
+pytest-django = "*"
+pytest-cov = "*"
+pytest-asyncio = "*"
+flake8 = "*"
+asynctest = "*"
+django-sslserver = "*"
+"flake8-bugbear" = "*"
+"flake8-mypy" = "*"
