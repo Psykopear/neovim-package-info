@@ -1,3 +1,4 @@
+use crate::consts;
 use reqwest;
 use semver;
 use serde_json;
@@ -26,7 +27,7 @@ pub trait Store {
             if let Ok(latest_version) = semver::Version::parse(&store_version) {
                 if let Ok(requirement) = semver::Version::parse(req) {
                     if latest_version.major > requirement.major {
-                        vec![(format!("{}", latest_version), "Error".to_string())]
+                        vec![(format!("{}", latest_version), consts::RED_HG.to_string())]
                     } else if latest_version.minor > requirement.minor {
                         let split: Vec<String> = latest_version
                             .to_string()
@@ -34,8 +35,11 @@ pub trait Store {
                             .map(|x| x.to_string())
                             .collect();
                         vec![
-                            (format!("{}.", split[0]).to_string(), "Comment".to_string()),
-                            (split[1..].join("."), "Directory".to_string()),
+                            (
+                                format!("{}.", split[0]).to_string(),
+                                consts::GREY_HG.to_string(),
+                            ),
+                            (split[1..].join("."), consts::BLUE_HG.to_string()),
                         ]
                     } else if latest_version.patch > requirement.patch {
                         let split: Vec<String> = latest_version
@@ -46,34 +50,34 @@ pub trait Store {
                         vec![
                             (
                                 format!("{}.", split[..2].join(".")).to_string(),
-                                "Comment".to_string(),
+                                consts::GREY_HG.to_string(),
                             ),
                             (split[2..].join("."), "String".to_string()),
                         ]
                     } else {
-                        vec![(format!("{}", latest_version), "Comment".to_string())]
+                        vec![(format!("{}", latest_version), consts::GREY_HG.to_string())]
                     }
                 } else {
                     if let Ok(requirement) = semver::VersionReq::parse(req) {
                         if requirement.matches(&latest_version) {
-                            vec![(format!("{}", latest_version), "Comment".to_string())]
+                            vec![(format!("{}", latest_version), consts::GREY_HG.to_string())]
                         } else {
                             vec![(format!("{}", latest_version), "Number".to_string())]
                         }
                     } else {
-                        vec![(format!("{}", latest_version), "Comment".to_string())]
+                        vec![(format!("{}", latest_version), consts::GREY_HG.to_string())]
                     }
                 }
             } else {
                 vec![(
                     format!("Error parsing store version {}", store_version),
-                    "Comment".to_string(),
+                    consts::GREY_HG.to_string(),
                 )]
             }
         } else {
             vec![(
                 format!("Error getting store version for {}", name),
-                "Comment".to_string(),
+                consts::GREY_HG.to_string(),
             )]
         }
     }
@@ -82,6 +86,7 @@ pub trait Store {
 pub struct Cratesio {
     pub name: String,
     pub base_url: String,
+    pub namespace: i64,
 }
 
 impl Store for Cratesio {
@@ -89,6 +94,7 @@ impl Store for Cratesio {
         Self {
             name: "crates.io".to_string(),
             base_url: "https://crates.io/api/v1/crates/{package}".to_string(),
+            namespace: 0,
         }
     }
 

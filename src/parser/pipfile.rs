@@ -1,16 +1,6 @@
 use serde::{Deserialize, Serialize};
+use serde_json;
 use std::collections::HashMap;
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct DetailedDep {
-    version: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub enum Dep {
-    Simple(String),
-    Detailed(DetailedDep),
-}
 
 #[derive(Serialize, Deserialize)]
 pub struct Pipfile {
@@ -20,8 +10,20 @@ pub struct Pipfile {
     pub dev_dependencies: HashMap<String, toml::Value>,
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct Piplock {
+    pub default: HashMap<String, serde_json::Value>,
+    pub develop: HashMap<String, serde_json::Value>,
+}
+
 impl Pipfile {
     pub fn from_str(content: &str) -> Result<Self, Box<std::error::Error>> {
         Ok(toml::from_str(content)?)
+    }
+}
+
+impl Piplock {
+    pub fn from_str(content: &str) -> Result<Self, Box<std::error::Error>> {
+        Ok(serde_json::from_str(content)?)
     }
 }

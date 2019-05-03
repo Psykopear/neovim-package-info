@@ -25,3 +25,8 @@ TODO, probably not much here
 ## Contributing
 
 TODO
+
+## TODO
+
+[ ] Send data to the correct buffer, instead of the current buffer
+[ ] Check lockfile to know actually installed version

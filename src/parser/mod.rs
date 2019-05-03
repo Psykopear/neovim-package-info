@@ -11,6 +11,10 @@ pub fn parse_pipfile(content: &str) -> Result<pipfile::Pipfile, Box<std::error::
     Ok(pipfile::Pipfile::from_str(content)?)
 }
 
+pub fn parse_piplock(content: &str) -> Result<pipfile::Piplock, Box<std::error::Error>> {
+    Ok(pipfile::Piplock::from_str(content)?)
+}
+
 pub fn parse_package_json(
     content: &str,
 ) -> Result<package_json::PackageJson, Box<std::error::Error>> {
