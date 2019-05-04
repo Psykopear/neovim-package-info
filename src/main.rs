@@ -3,7 +3,9 @@ mod neovim;
 mod parser;
 mod store;
 
-fn main() -> Result<(), Box<std::error::Error>> {
+use failure::Error;
+
+fn main() -> Result<(), Error> {
     // Just start the event handler and let it go
     neovim::run();
     Ok(())
