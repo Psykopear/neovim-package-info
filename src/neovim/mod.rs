@@ -1,18 +1,16 @@
 use crate::consts;
-use crate::parser::{
-    parse_cargo_lock, parse_cargo_toml, parse_package_json, parse_pipfile, parse_piplock,
-};
+use crate::parser::{parse_package_json, parse_pipfile, parse_piplock, CargoParser, Parser};
 use crate::store::{Cratesio, Npm, Pypi, Store};
 use failure::Error;
 use neovim_lib::{Neovim, NeovimApi, Session, Value};
 use rayon::prelude::*;
 use std::fs;
 
-struct DependencyInfo {
-    name: String,
-    current: String,
-    latest: Vec<(String, String)>,
-    line_number: i64,
+pub struct DependencyInfo {
+    pub name: String,
+    pub current: String,
+    pub latest: Vec<(String, String)>,
+    pub line_number: i64,
 }
 
 enum Messages {
@@ -100,41 +98,9 @@ impl EventHandler {
         lockfile_content: &str,
         nvim_session: &mut NeovimSession,
     ) -> Result<(), Error> {
-        let cargo_toml = parse_cargo_toml(&content)?;
-        let cargo_lock = parse_cargo_lock(&lockfile_content)?;
-
-        // Concatenate all dependencie so we can parallelize network calls
-        let dependencies: Vec<DependencyInfo> = cargo_toml
-            .dependencies
-            .iter()
-            .chain(cargo_toml.dev_dependencies.iter())
-            .chain(cargo_toml.build_dependencies.iter())
-            .map(|(name, _)| {
-                let mut line_number: i64 = 0;
-                for (index, line) in content.split("\n").enumerate() {
-                    if line.to_string().starts_with(&format!("{} = ", name)) {
-                        line_number = index as i64
-                    }
-                }
-                if let Some(version) = cargo_lock.get(name) {
-                    DependencyInfo {
-                        line_number,
-                        name: name.to_string(),
-                        current: version.to_string(),
-                        latest: vec![("...".to_string(), consts::GREY_HG.to_string())],
-                    }
-                } else {
-                    DependencyInfo {
-                        name: name.to_string(),
-                        current: "--".to_string(),
-                        latest: vec![("...".to_string(), consts::GREY_HG.to_string())],
-                        line_number,
-                    }
-                }
-            })
-            .collect();
+        let cargo_parser = CargoParser::new(&content, &lockfile_content);
+        let dependencies: Vec<DependencyInfo> = cargo_parser.get_dependencies()?;
         self.handle_generic(&dependencies, nvim_session)?;
-
         let latest_dependencies = dependencies
             .par_iter()
             .map(|dep| DependencyInfo {
