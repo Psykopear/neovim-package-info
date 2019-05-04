@@ -1,5 +1,5 @@
 use crate::consts;
-use crate::parser::{parse_package_json, parse_pipfile, parse_piplock, CargoParser, Parser};
+use crate::parser::{CargoParser, PackageJsonParser, Parser, PipfileParser};
 use crate::store::{Cratesio, Npm, Pypi, Store};
 use failure::Error;
 use neovim_lib::{Neovim, NeovimApi, Session, Value};
@@ -107,7 +107,7 @@ impl EventHandler {
                 current: dep.current.clone(),
                 line_number: dep.line_number,
                 name: dep.name.clone(),
-                latest: self.cratesio.check_dependency(&dep.name, &dep.current),
+                latest: self.cratesio.check_dependency(&dep),
             })
             .collect();
         self.handle_generic(&latest_dependencies, nvim_session)?;
@@ -120,115 +120,42 @@ impl EventHandler {
         lockfile_content: &str,
         nvim_session: &mut NeovimSession,
     ) -> Result<(), Error> {
-        let pipfile = parse_pipfile(&content)?;
-        let lockfile = parse_piplock(&lockfile_content)?;
-
-        // First write data about current versions and a loader
-        let dependencies: Vec<DependencyInfo> = pipfile
-            .dependencies
-            .iter()
-            .chain(pipfile.dev_dependencies.iter())
-            .map(|(name, _)| {
-                let mut line_number: i64 = 0;
-                for (index, line) in content.split("\n").enumerate() {
-                    if line.to_string().starts_with(&format!("{} = ", name))
-                        || line.to_string().starts_with(&format!("\"{}\" = ", name))
-                    {
-                        line_number = index as i64
-                    }
-                }
-                // Parse lockfile
-                let lockdata = if lockfile.default.contains_key(name) {
-                    lockfile.default.get(name)
-                } else if lockfile.develop.contains_key(name) {
-                    lockfile.develop.get(name)
-                } else {
-                    None
-                };
-                match lockdata {
-                    Some(package_info) => DependencyInfo {
-                        line_number,
-                        name: name.to_string(),
-                        current: package_info["version"]
-                            .as_str()
-                            .expect("Version missing")
-                            .to_string(),
-                        latest: vec![("...".to_string(), consts::GREY_HG.to_string())],
-                    },
-                    None => DependencyInfo {
-                        name: name.to_string(),
-                        current: "--".to_string(),
-                        latest: vec![("...".to_string(), consts::GREY_HG.to_string())],
-                        line_number,
-                    },
-                }
-            })
-            .collect();
+        let pipfile_parser = PipfileParser::new(&content, &lockfile_content);
+        let dependencies: Vec<DependencyInfo> = pipfile_parser.get_dependencies()?;
         self.handle_generic(&dependencies, nvim_session)?;
-
-        // Then concurrently fetch latest data and write it
         let latest_dependencies = dependencies
             .par_iter()
             .map(|dep| DependencyInfo {
                 current: dep.current.clone(),
                 line_number: dep.line_number,
                 name: dep.name.clone(),
-                latest: self.pypi.check_dependency(&dep.name, &dep.current),
+                latest: self.pypi.check_dependency(&dep),
             })
             .collect();
         self.handle_generic(&latest_dependencies, nvim_session)?;
-
         Ok(())
     }
 
     fn handle_package_json(
         &self,
         content: &str,
+        lockfile_content: &str,
         nvim_session: &mut NeovimSession,
     ) -> Result<(), Error> {
-        let package_json = parse_package_json(&content)?;
-
-        // Concatenate all dependencie so we can parallelize network calls
-        let dependencies = package_json
-            .dependencies
-            .iter()
-            .chain(package_json.dev_dependencies.iter());
-
-        // First find the line number of each requirement and set a
-        // waiting message as virtual text
-        for dep in dependencies {
-            let mut line_number = 0;
-            for (index, line) in content.split("\n").enumerate() {
-                if line.to_string().contains(&format!("\"{}\": \"", dep.0)) {
-                    line_number = index
-                }
-            }
-            nvim_session.set_text(
-                &vec![("...".to_string(), consts::GREY_HG.to_string())],
-                line_number as i64,
-            );
-        }
-
-        let dependencies: Vec<(String, Vec<(String, String)>)> = package_json
-            .dependencies
+        let package_json_parser = PackageJsonParser::new(&content, &lockfile_content);
+        let dependencies: Vec<DependencyInfo> = package_json_parser.get_dependencies()?;
+        self.handle_generic(&dependencies, nvim_session)?;
+        let latest_dependencies = dependencies
             .par_iter()
-            .chain(package_json.dev_dependencies.par_iter())
-            .map(|(name, dependency)| {
-                (
-                    name.to_string(),
-                    self.npm.check_dependency(&name, &dependency),
-                )
+            .map(|dep| DependencyInfo {
+                current: dep.current.clone(),
+                line_number: dep.line_number,
+                name: dep.name.clone(),
+                latest: self.npm.check_dependency(&dep),
             })
             .collect();
-        for (name, messages) in dependencies {
-            let mut line_number = 0;
-            for (index, line) in content.split("\n").enumerate() {
-                if line.to_string().contains(&format!("\"{}\": \"", name)) {
-                    line_number = index
-                }
-            }
-            nvim_session.set_text(&messages, line_number as i64);
-        }
+        self.handle_generic(&latest_dependencies, nvim_session)?;
+
         Ok(())
     }
 
@@ -290,12 +217,22 @@ impl EventHandler {
                             }
                         }
                         Messages::PackageJson => {
-                            match self.handle_package_json(&content, nvim_session) {
-                                Ok(_) => (),
-                                Err(error) => {
-                                    nvim_session.echo(&error.to_string());
-                                }
-                            };
+                            if let Ok(lockfile_content) =
+                                fs::read_to_string(file_path.replace("package.json", "yarn.lock"))
+                            {
+                                match self.handle_package_json(
+                                    &content,
+                                    &lockfile_content,
+                                    nvim_session,
+                                ) {
+                                    Ok(_) => (),
+                                    Err(error) => {
+                                        nvim_session.echo(&error.to_string());
+                                    }
+                                };
+                            } else {
+                                nvim_session.echo("Can't find lockfile");
+                            }
                         }
                         Messages::Unknown(event) => {
                             nvim_session

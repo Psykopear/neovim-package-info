@@ -1,4 +1,5 @@
 use crate::consts;
+use crate::neovim::DependencyInfo;
 use failure::Error;
 use reqwest;
 use semver;
@@ -23,13 +24,13 @@ pub trait Store {
     fn get_name(&self) -> &String;
 
     // Check dependency and return a string
-    fn check_dependency(&self, name: &str, req: &str) -> Vec<(String, String)> {
-        if let Ok(store_version) = self.get_max_version(name) {
+    fn check_dependency(&self, dep: &DependencyInfo) -> Vec<(String, String)> {
+        if let Ok(store_version) = self.get_max_version(&dep.name) {
             if let Ok(latest_version) = semver::Version::parse(&store_version) {
-                if let Ok(requirement) = semver::Version::parse(req) {
-                    if latest_version.major > requirement.major {
+                if let Ok(current) = semver::Version::parse(&dep.current) {
+                    if latest_version.major > current.major {
                         vec![(format!("{}", latest_version), consts::RED_HG.to_string())]
-                    } else if latest_version.minor > requirement.minor {
+                    } else if latest_version.minor > current.minor {
                         let split: Vec<String> = latest_version
                             .to_string()
                             .split('.')
@@ -42,7 +43,7 @@ pub trait Store {
                             ),
                             (split[1..].join("."), consts::BLUE_HG.to_string()),
                         ]
-                    } else if latest_version.patch > requirement.patch {
+                    } else if latest_version.patch > current.patch {
                         let split: Vec<String> = latest_version
                             .to_string()
                             .split('.')
@@ -59,25 +60,14 @@ pub trait Store {
                         vec![(format!("{}", latest_version), consts::GREY_HG.to_string())]
                     }
                 } else {
-                    if let Ok(requirement) = semver::VersionReq::parse(req) {
-                        if requirement.matches(&latest_version) {
-                            vec![(format!("{}", latest_version), consts::GREY_HG.to_string())]
-                        } else {
-                            vec![(format!("{}", latest_version), "Number".to_string())]
-                        }
-                    } else {
-                        vec![(format!("{}", latest_version), consts::GREY_HG.to_string())]
-                    }
+                    vec![(store_version, consts::GREY_HG.to_string())]
                 }
             } else {
-                vec![(
-                    format!("Error parsing store version {}", store_version),
-                    consts::GREY_HG.to_string(),
-                )]
+                vec![(store_version, consts::GREY_HG.to_string())]
             }
         } else {
             vec![(
-                format!("Error getting store version for {}", name),
+                format!("Error getting store version for {}", dep.name),
                 consts::GREY_HG.to_string(),
             )]
         }
@@ -109,10 +99,11 @@ impl Store for Cratesio {
 
     fn get_max_version(&self, package: &str) -> Result<String, Error> {
         let body = self.get_package_info(package)?;
-        let max_version = body["crate"]["max_version"]
-            .as_str()
-            .expect("Can't find version");
-        Ok(max_version.to_string())
+        if let Some(max_version) = body["crate"]["max_version"].as_str() {
+            Ok(max_version.to_string())
+        } else {
+            Ok("Can't find version".to_string())
+        }
     }
 }
 
@@ -139,10 +130,11 @@ impl Store for Pypi {
 
     fn get_max_version(&self, package: &str) -> Result<String, Error> {
         let body = self.get_package_info(package)?;
-        let res = body["info"]["version"]
-            .as_str()
-            .expect("Can't find version");
-        Ok(res.to_string())
+        if let Some(res) = body["info"]["version"].as_str() {
+            Ok(res.to_string())
+        } else {
+            Ok("Can't find version".to_string())
+        }
     }
 }
 
@@ -170,9 +162,10 @@ impl Store for Npm {
     fn get_max_version(&self, package: &str) -> Result<String, Error> {
         let body = self.get_package_info(package)?;
 
-        let res = body["dist-tags"]["latest"]
-            .as_str()
-            .expect("Can't find version");
-        Ok(res.to_string())
+        if let Some(res) = body["dist-tags"]["latest"].as_str() {
+            Ok(res.to_string())
+        } else {
+            Ok("Can't find version".to_string())
+        }
     }
 }

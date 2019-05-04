@@ -24,8 +24,60 @@ impl From<cargo_toml::Manifest> for Manifest {
     }
 }
 
+impl From<pipfile::Pipfile> for Manifest {
+    fn from(pipfile: pipfile::Pipfile) -> Manifest {
+        let dependencies: Vec<String> = pipfile
+            .dependencies
+            .iter()
+            .chain(pipfile.dev_dependencies.iter())
+            .map(|(name, _)| name.to_string())
+            .collect();
+        Manifest { dependencies }
+    }
+}
+
+impl From<package_json::PackageJson> for Manifest {
+    fn from(package_json: package_json::PackageJson) -> Manifest {
+        let dependencies: Vec<String> = package_json
+            .dependencies
+            .iter()
+            .chain(package_json.dev_dependencies.iter())
+            .map(|(name, _)| name.to_string())
+            .collect();
+        Manifest { dependencies }
+    }
+}
+
 pub struct Lockfile {
     dependencies: HashMap<String, String>,
+}
+
+impl From<pipfile::Piplock> for Lockfile {
+    fn from(piplock: pipfile::Piplock) -> Lockfile {
+        let dependencies: HashMap<String, String> = piplock
+            .default
+            .iter()
+            .chain(piplock.develop.iter())
+            .map(|dep| {
+                (
+                    dep.0.to_string(),
+                    dep.1["version"].as_str().expect("").to_string(),
+                )
+            })
+            .collect();
+        Lockfile { dependencies }
+    }
+}
+
+impl From<package_json::YarnLock> for Lockfile {
+    fn from(yarn_lock: package_json::YarnLock) -> Lockfile {
+        let dependencies: HashMap<String, String> = yarn_lock
+            .dependencies
+            .iter()
+            .map(|dep| (dep.0.to_string(), dep.1.to_string()))
+            .collect();
+        Lockfile { dependencies }
+    }
 }
 
 impl From<HashMap<String, toml::Value>> for Lockfile {
@@ -113,14 +165,122 @@ impl Parser for CargoParser {
     }
 }
 
-pub fn parse_pipfile(content: &str) -> Result<pipfile::Pipfile, Error> {
-    Ok(pipfile::Pipfile::from_str(content)?)
+pub struct PipfileParser {
+    manifest_content: String,
+    lockfile_content: String,
 }
 
-pub fn parse_piplock(content: &str) -> Result<pipfile::Piplock, Error> {
-    Ok(pipfile::Piplock::from_str(content)?)
+impl Parser for PipfileParser {
+    fn new(manifest_content: &str, lockfile_content: &str) -> Self {
+        PipfileParser {
+            manifest_content: manifest_content.to_string(),
+            lockfile_content: lockfile_content.to_string(),
+        }
+    }
+
+    fn parse_manifest(&self) -> Result<Manifest, Error> {
+        Ok(pipfile::Pipfile::from_str(&self.manifest_content)?.into())
+    }
+
+    fn parse_lockfile(&self) -> Result<Lockfile, Error> {
+        Ok(pipfile::Piplock::from_str(&self.lockfile_content)?.into())
+    }
+
+    fn get_dependencies(&self) -> Result<Vec<DependencyInfo>, Error> {
+        let pipfile = self.parse_manifest()?;
+        let piplock = self.parse_lockfile()?;
+
+        // Concatenate all dependencie so we can parallelize network calls
+        Ok(pipfile
+            .dependencies
+            .iter()
+            .map(|name| {
+                let mut line_number: i64 = 0;
+                for (index, line) in self.manifest_content.split("\n").enumerate() {
+                    if line.to_string().starts_with(&format!("{} = ", name))
+                        || line.to_string().starts_with(&format!("\"{}\" = ", name))
+                    {
+                        line_number = index as i64
+                    }
+                }
+                if let Some(version) = piplock.dependencies.get(name) {
+                    let mut v = version.chars();
+                    v.next();
+                    v.next();
+                    DependencyInfo {
+                        line_number,
+                        name: name.to_string(),
+                        current: v.as_str().to_string(),
+                        latest: vec![("...".to_string(), consts::GREY_HG.to_string())],
+                    }
+                } else {
+                    DependencyInfo {
+                        name: name.to_string(),
+                        current: "--".to_string(),
+                        latest: vec![("...".to_string(), consts::GREY_HG.to_string())],
+                        line_number,
+                    }
+                }
+            })
+            .collect())
+    }
 }
 
-pub fn parse_package_json(content: &str) -> Result<package_json::PackageJson, Error> {
-    Ok(package_json::PackageJson::from_str(content)?)
+pub struct PackageJsonParser {
+    manifest_content: String,
+    lockfile_content: String,
+}
+
+impl Parser for PackageJsonParser {
+    fn new(manifest_content: &str, lockfile_content: &str) -> Self {
+        PackageJsonParser {
+            manifest_content: manifest_content.to_string(),
+            lockfile_content: lockfile_content.to_string(),
+        }
+    }
+
+    fn parse_manifest(&self) -> Result<Manifest, Error> {
+        Ok(package_json::PackageJson::from_str(&self.manifest_content)?.into())
+    }
+
+    fn parse_lockfile(&self) -> Result<Lockfile, Error> {
+        let lock_file = package_json::YarnLock::from_str(&self.lockfile_content)?;
+        Ok(lock_file.into())
+    }
+
+    fn get_dependencies(&self) -> Result<Vec<DependencyInfo>, Error> {
+        let package_json = self.parse_manifest()?;
+        let yarn_lock = self.parse_lockfile()?;
+
+        // Concatenate all dependencie so we can parallelize network calls
+        Ok(package_json
+            .dependencies
+            .iter()
+            .map(|name| {
+                let mut line_number: i64 = 0;
+                for (index, line) in self.manifest_content.split("\n").enumerate() {
+                    if line.to_string().contains(&format!("\"{}\": ", name)) {
+                        line_number = index as i64
+                    }
+                }
+                if let Some(version) = yarn_lock.dependencies.get(name) {
+                    let mut v = version.chars();
+                    v.next();
+                    DependencyInfo {
+                        line_number,
+                        name: name.to_string(),
+                        current: v.as_str().to_string(),
+                        latest: vec![("...".to_string(), consts::GREY_HG.to_string())],
+                    }
+                } else {
+                    DependencyInfo {
+                        name: name.to_string(),
+                        current: "--".to_string(),
+                        latest: vec![("...".to_string(), consts::GREY_HG.to_string())],
+                        line_number,
+                    }
+                }
+            })
+            .collect())
+    }
 }
