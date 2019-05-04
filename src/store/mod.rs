@@ -1,4 +1,5 @@
 use crate::consts;
+use failure::Error;
 use reqwest;
 use semver;
 use serde_json;
@@ -9,13 +10,13 @@ pub trait Store {
 
     // A method to retrieve package info given base_url and package name
     // Should be the same for all stores, so we give a default implementation here
-    fn get_package_info(&self, package: &str) -> Result<serde_json::Value, Box<std::error::Error>> {
+    fn get_package_info(&self, package: &str) -> Result<serde_json::Value, Error> {
         let url: String = self.get_url().replace("{package}", package);
         Ok(reqwest::get(&url)?.json()?)
     }
 
     // A method to retrieve the last version of a package given its name in the store
-    fn get_max_version(&self, package: &str) -> Result<String, Box<std::error::Error>>;
+    fn get_max_version(&self, package: &str) -> Result<String, Error>;
 
     // Methods to access the structure's fields
     fn get_url(&self) -> &String;
@@ -106,7 +107,7 @@ impl Store for Cratesio {
         &self.name
     }
 
-    fn get_max_version(&self, package: &str) -> Result<String, Box<std::error::Error>> {
+    fn get_max_version(&self, package: &str) -> Result<String, Error> {
         let body = self.get_package_info(package)?;
         let max_version = body["crate"]["max_version"]
             .as_str()
@@ -136,7 +137,7 @@ impl Store for Pypi {
         &self.name
     }
 
-    fn get_max_version(&self, package: &str) -> Result<String, Box<std::error::Error>> {
+    fn get_max_version(&self, package: &str) -> Result<String, Error> {
         let body = self.get_package_info(package)?;
         let res = body["info"]["version"]
             .as_str()
@@ -166,7 +167,7 @@ impl Store for Npm {
         &self.name
     }
 
-    fn get_max_version(&self, package: &str) -> Result<String, Box<std::error::Error>> {
+    fn get_max_version(&self, package: &str) -> Result<String, Error> {
         let body = self.get_package_info(package)?;
 
         let res = body["dist-tags"]["latest"]

@@ -1,3 +1,4 @@
+use failure::Error;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -9,7 +10,7 @@ pub struct PackageJson {
 }
 
 impl PackageJson {
-    pub fn from_str(content: &str) -> Result<Self, Box<std::error::Error>> {
+    pub fn from_str(content: &str) -> Result<Self, Error> {
         Ok(serde_json::from_str(content)?)
     }
 }

@@ -1,16 +1,16 @@
 use crate::consts;
 use crate::parser::{parse_cargo_toml, parse_package_json, parse_pipfile, parse_piplock};
 use crate::store::{Cratesio, Npm, Pypi, Store};
-
+use failure::Error;
 use neovim_lib::{Neovim, NeovimApi, Session, Value};
 use rayon::prelude::*;
 use std::fs;
 
-pub fn parse_string(value: &Value) -> Result<String, String> {
-    value
-        .as_str()
-        .ok_or("cannot parse error".to_owned())
-        .map(|s| String::from(s))
+struct DependencyInfo {
+    name: String,
+    current: String,
+    latest: Vec<(String, String)>,
+    line_number: i64,
 }
 
 enum Messages {
@@ -31,8 +31,22 @@ impl From<String> for Messages {
     }
 }
 
+struct NeovimSession {
+    pub nvim: Neovim,
+}
+
+impl NeovimSession {
+    pub fn new() -> Self {
+        let session = Session::new_parent().unwrap();
+        let nvim = Neovim::new(session);
+        NeovimSession { nvim }
+    }
+    pub fn echo(&mut self, message: &str) {
+        self.nvim.command(&format!("echo \"{}\"", message)).unwrap();
+    }
+}
+
 struct EventHandler {
-    nvim: Neovim,
     cratesio: Cratesio,
     npm: Npm,
     pypi: Pypi,
@@ -40,21 +54,18 @@ struct EventHandler {
 
 impl EventHandler {
     fn new() -> Self {
-        let session = Session::new_parent().unwrap();
-        let nvim = Neovim::new(session);
         let cratesio = Cratesio::new();
         let pypi = Pypi::new();
         let npm = Npm::new();
         EventHandler {
-            nvim,
             cratesio,
             pypi,
             npm,
         }
     }
 
-    fn set_text(&mut self, messages: &Vec<(String, String)>, line_number: i64) {
-        if let Ok(buffer) = self.nvim.get_current_buf() {
+    fn set_text(&self, messages: &Vec<(String, String)>, line_number: i64, nvim: &mut Neovim) {
+        if let Ok(buffer) = nvim.get_current_buf() {
             let mut chunks: Vec<Value> = messages
                 .iter()
                 .map(|(message, highlight)| {
@@ -69,18 +80,18 @@ impl EventHandler {
                 0,
                 vec![Value::from(consts::PREFIX), Value::from(consts::GREY_HG)].into(),
             );
-            match buffer.set_virtual_text(&mut self.nvim, 0, line_number, chunks, vec![]) {
+            match buffer.set_virtual_text(nvim, 0, line_number, chunks, vec![]) {
                 Ok(_) => (),
-                Err(error) => self.echo(&format!("{}", error)),
+                Err(error) => self.echo(&format!("{}", error), nvim),
             }
         }
     }
 
-    fn echo(&mut self, message: &str) {
-        self.nvim.command(&format!("echo \"{}\"", message)).unwrap();
+    fn echo(&self, message: &str, nvim: &mut Neovim) {
+        nvim.command(&format!("echo \"{}\"", message)).unwrap();
     }
 
-    fn handle_cargo_toml(&mut self, content: &str) {
+    fn handle_cargo_toml(&self, content: &str, nvim: &mut Neovim) -> Result<(), Error> {
         let cargo_toml = parse_cargo_toml(&content).expect("Can't parse cargo toml");
 
         // Concatenate all dependencie so we can parallelize network calls
@@ -102,6 +113,7 @@ impl EventHandler {
             self.set_text(
                 &vec![("...".to_string(), consts::GREY_HG.to_string())],
                 line_number as i64,
+                nvim,
             );
         }
 
@@ -124,109 +136,80 @@ impl EventHandler {
                     line_number = index
                 }
             }
-            self.set_text(&messages, line_number as i64);
+            self.set_text(&messages, line_number as i64, nvim);
         }
+        Ok(())
     }
 
-    fn handle_pipfile(&mut self, content: &str, lockfile_content: &str) {
-        let pipfile = parse_pipfile(&content).expect("Error parsing pipfile");
-        let lockfile = parse_piplock(&lockfile_content).expect("Error parsing lockfile");
+    fn handle_pipfile(
+        &self,
+        content: &str,
+        lockfile_content: &str,
+        nvim: &mut Neovim,
+    ) -> Result<(), Error> {
+        let pipfile = parse_pipfile(&content)?;
+        let lockfile = parse_piplock(&lockfile_content)?;
 
-        // Concatenate all dependencie so we can parallelize network calls
-        let dependencies = pipfile
+        // First write data about current versions and a loader
+        let dependencies: Vec<DependencyInfo> = pipfile
             .dependencies
             .iter()
-            .chain(pipfile.dev_dependencies.iter());
-
-        // First find the line number of each requirement and set a
-        // waiting message as virtual text
-        for dep in dependencies {
-            let mut line_number = 0;
-            for (index, line) in content.split("\n").enumerate() {
-                if line.to_string().starts_with(&format!("{} = ", dep.0))
-                    || line.to_string().starts_with(&format!("\"{}\" = ", dep.0))
-                {
-                    line_number = index
+            .chain(pipfile.dev_dependencies.iter())
+            .map(|(name, _)| {
+                let mut line_number: i64 = 0;
+                for (index, line) in content.split("\n").enumerate() {
+                    if line.to_string().starts_with(&format!("{} = ", name))
+                        || line.to_string().starts_with(&format!("\"{}\" = ", name))
+                    {
+                        line_number = index as i64
+                    }
                 }
-            }
-            // Parse lockfile
-            let lockdata = if lockfile.default.contains_key(dep.0) {
-                lockfile.default.get(dep.0)
-            } else if lockfile.develop.contains_key(dep.0) {
-                lockfile.develop.get(dep.0)
-            } else {
-                None
-            };
-            match lockdata {
-                Some(package_info) => {
-                    self.set_text(
-                        &vec![
-                            (
-                                format!("{} ", package_info["version"].as_str().expect("")),
-                                consts::GREY_HG.to_string(),
-                            ),
-                            ("...".to_string(), consts::GREY_HG.to_string()),
-                        ],
-                        line_number as i64,
-                    );
+                // Parse lockfile
+                let lockdata = if lockfile.default.contains_key(name) {
+                    lockfile.default.get(name)
+                } else if lockfile.develop.contains_key(name) {
+                    lockfile.develop.get(name)
+                } else {
+                    None
+                };
+                match lockdata {
+                    Some(package_info) => DependencyInfo {
+                        line_number,
+                        name: name.to_string(),
+                        current: package_info["version"]
+                            .as_str()
+                            .expect("Version missing")
+                            .to_string(),
+                        latest: vec![("...".to_string(), consts::GREY_HG.to_string())],
+                    },
+                    None => DependencyInfo {
+                        name: name.to_string(),
+                        current: "--".to_string(),
+                        latest: vec![("...".to_string(), consts::GREY_HG.to_string())],
+                        line_number,
+                    },
                 }
-                None => {
-                    self.set_text(
-                        &vec![("...".to_string(), consts::GREY_HG.to_string())],
-                        line_number as i64,
-                    );
-                }
-            }
-        }
-
-        let dependencies: Vec<(String, Vec<(String, String)>)> = pipfile
-            .dependencies
-            .par_iter()
-            .chain(pipfile.dev_dependencies.par_iter())
-            .map(|(name, dependency)| {
-                let req = format!("{:?}", dependency);
-                (name.to_string(), self.pypi.check_dependency(&name, &req))
             })
             .collect();
-        for (name, messages) in dependencies {
-            let mut line_number = 0;
-            for (index, line) in content.split("\n").enumerate() {
-                if line.to_string().starts_with(&format!("{} = ", name))
-                    || line.to_string().starts_with(&format!("\"{}\" = ", name))
-                {
-                    line_number = index
-                }
-            }
+        self.handle_generic(&dependencies, nvim)?;
 
-            // Parse lockfile
-            let lockdata = if lockfile.default.contains_key(&name) {
-                lockfile.default.get(&name)
-            } else if lockfile.develop.contains_key(&name) {
-                lockfile.develop.get(&name)
-            } else {
-                None
-            };
-            match lockdata {
-                Some(package_info) => {
-                    let mut current = package_info["version"].as_str().expect("").chars();
-                    current.next();
-                    current.next();
-                    let mut res = vec![(
-                        format!("current: {}  latest: ", current.as_str()),
-                        consts::GREY_HG.to_string(),
-                    )];
-                    res.append(&mut messages.clone());
-                    self.set_text(&res, line_number as i64);
-                }
-                None => {
-                    self.set_text(&messages, line_number as i64);
-                }
-            }
-        }
+        // Then concurrently fetch latest data and write it
+        let latest_dependencies = dependencies
+            .par_iter()
+            .map(|dep| DependencyInfo {
+                current: dep.current.clone(),
+                line_number: dep.line_number,
+                name: dep.name.clone(),
+                latest: self.pypi.check_dependency(&dep.name, &dep.current),
+            })
+            .collect();
+        self.handle_generic(&latest_dependencies, nvim)?;
+
+        Ok(())
     }
 
-    fn handle_package_json(&mut self, content: &str) {
-        let package_json = parse_package_json(&content).expect("Can't parse package json");
+    fn handle_package_json(&self, content: &str, nvim: &mut Neovim) -> Result<(), Error> {
+        let package_json = parse_package_json(&content)?;
 
         // Concatenate all dependencie so we can parallelize network calls
         let dependencies = package_json
@@ -246,6 +229,7 @@ impl EventHandler {
             self.set_text(
                 &vec![("...".to_string(), consts::GREY_HG.to_string())],
                 line_number as i64,
+                nvim,
             );
         }
 
@@ -267,32 +251,70 @@ impl EventHandler {
                     line_number = index
                 }
             }
-            self.set_text(&messages, line_number as i64);
+            self.set_text(&messages, line_number as i64, nvim);
         }
+        Ok(())
     }
 
-    fn recv(&mut self) {
-        let receiver = self.nvim.session.start_event_loop_channel();
+    fn handle_generic(
+        &self,
+        dependencies: &Vec<DependencyInfo>,
+        nvim: &mut Neovim,
+    ) -> Result<(), Error> {
+        for dep in dependencies {
+            let mut lines = vec![(
+                format!("current: {}, latest: ", dep.current),
+                consts::GREY_HG.to_string(),
+            )];
+            lines.append(&mut dep.latest.clone());
+            self.set_text(&lines, dep.line_number, nvim);
+        }
+        Ok(())
+    }
+
+    fn recv(&self, nvim: &mut Neovim) {
+        let receiver = nvim.session.start_event_loop_channel();
 
         for (event, args) in receiver {
-            let file_path = &parse_string(&args[0]).expect("File path not received!");
-            let content = fs::read_to_string(file_path).expect("Can't read to string");
-            match Messages::from(event) {
-                Messages::CargoToml => {
-                    self.handle_cargo_toml(&content);
-                }
-                Messages::Pipfile => {
-                    // Parse lock file
-                    let lockfile_path = format!("{}.lock", file_path);
-                    let lockfile_content =
-                        fs::read_to_string(lockfile_path).expect("Can't read lockfile to string");
-                    self.handle_pipfile(&content, &lockfile_content);
-                }
-                Messages::PackageJson => {
-                    self.handle_package_json(&content);
-                }
-                Messages::Unknown(event) => {
-                    self.echo(&format!("Unkown command: {}, args: {:?}", event, args));
+            if let Some(file_path) = args[0].as_str() {
+                if let Ok(content) = fs::read_to_string(&file_path) {
+                    match Messages::from(event) {
+                        Messages::CargoToml => {
+                            match self.handle_cargo_toml(&content, nvim) {
+                                Ok(_) => (),
+                                Err(error) => {
+                                    self.echo(&error.to_string(), nvim);
+                                }
+                            };
+                        }
+                        Messages::Pipfile => {
+                            // Parse lock file
+                            if let Ok(lockfile_content) =
+                                fs::read_to_string(format!("{}.lock", file_path))
+                            {
+                                match self.handle_pipfile(&content, &lockfile_content, nvim) {
+                                    Ok(_) => (),
+                                    Err(error) => {
+                                        self.echo(&error.to_string(), nvim);
+                                    }
+                                };
+                            }
+                        }
+                        Messages::PackageJson => {
+                            match self.handle_package_json(&content, nvim) {
+                                Ok(_) => (),
+                                Err(error) => {
+                                    self.echo(&error.to_string(), nvim);
+                                }
+                            };
+                        }
+                        Messages::Unknown(event) => {
+                            self.echo(
+                                &format!("Unkown command: {}, args: {:?}", event, args),
+                                nvim,
+                            );
+                        }
+                    }
                 }
             }
         }
@@ -300,6 +322,8 @@ impl EventHandler {
 }
 
 pub fn run() {
-    let mut event_handler = EventHandler::new();
-    event_handler.recv();
+    let session = Session::new_parent().unwrap();
+    let mut nvim = Neovim::new(session);
+    let event_handler = EventHandler::new();
+    event_handler.recv(&mut nvim);
 }

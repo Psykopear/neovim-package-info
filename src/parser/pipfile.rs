@@ -1,3 +1,4 @@
+use failure::Error;
 use serde::{Deserialize, Serialize};
 use serde_json;
 use std::collections::HashMap;
@@ -17,13 +18,13 @@ pub struct Piplock {
 }
 
 impl Pipfile {
-    pub fn from_str(content: &str) -> Result<Self, Box<std::error::Error>> {
+    pub fn from_str(content: &str) -> Result<Self, Error> {
         Ok(toml::from_str(content)?)
     }
 }
 
 impl Piplock {
-    pub fn from_str(content: &str) -> Result<Self, Box<std::error::Error>> {
+    pub fn from_str(content: &str) -> Result<Self, Error> {
         Ok(serde_json::from_str(content)?)
     }
 }
