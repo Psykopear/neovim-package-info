@@ -165,10 +165,7 @@ impl EventHandler {
         nvim_session: &mut NeovimSession,
     ) -> Result<(), Error> {
         for dep in dependencies {
-            let mut lines = vec![(
-                format!("current: {}, latest: ", dep.current),
-                consts::GREY_HG.to_string(),
-            )];
+            let mut lines = vec![(dep.current.to_string(), consts::GREY_HG.to_string())];
             lines.append(&mut dep.latest.clone());
             nvim_session.set_text(&lines, dep.line_number);
         }

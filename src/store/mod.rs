@@ -29,7 +29,10 @@ pub trait Store {
             if let Ok(latest_version) = semver::Version::parse(&store_version) {
                 if let Ok(current) = semver::Version::parse(&dep.current) {
                     if latest_version.major > current.major {
-                        vec![(format!("{}", latest_version), consts::RED_HG.to_string())]
+                        vec![(
+                            format!(" -> {}", latest_version),
+                            consts::RED_HG.to_string(),
+                        )]
                     } else if latest_version.minor > current.minor {
                         let split: Vec<String> = latest_version
                             .to_string()
@@ -38,7 +41,7 @@ pub trait Store {
                             .collect();
                         vec![
                             (
-                                format!("{}.", split[0]).to_string(),
+                                format!(" -> {}.", split[0]).to_string(),
                                 consts::GREY_HG.to_string(),
                             ),
                             (split[1..].join("."), consts::BLUE_HG.to_string()),
@@ -51,13 +54,14 @@ pub trait Store {
                             .collect();
                         vec![
                             (
-                                format!("{}.", split[..2].join(".")).to_string(),
+                                format!(" -> {}.", split[..2].join(".")).to_string(),
                                 consts::GREY_HG.to_string(),
                             ),
                             (split[2..].join("."), "String".to_string()),
                         ]
                     } else {
-                        vec![(format!("{}", latest_version), consts::GREY_HG.to_string())]
+                        // vec![(format!("{}", latest_version), consts::GREY_HG.to_string())]
+                        vec![]
                     }
                 } else {
                     vec![(store_version, consts::GREY_HG.to_string())]
