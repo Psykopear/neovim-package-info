@@ -22,8 +22,7 @@ pub struct YarnLock {
 impl YarnLock {
     pub fn from_str(content: &str) -> Result<Self, Error> {
         // Because of course the js community couldn't think of anything
-        // better than a custom file format to build yarn.lock file,
-        // so I have to parse it manually.
+        // better than a custom file format to build yarn.lock file, I have to parse it manually.
         // TODO: This implementation seems really fragile, try to improve it
         let lines: Vec<&str> = content.split("\n").collect();
         let mut dependencies: HashMap<String, String> = HashMap::new();
