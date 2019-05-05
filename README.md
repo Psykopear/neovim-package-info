@@ -1,7 +1,7 @@
 # Neovim dependency check
 
 ## Prelude
-The concept is copied from [vim-package-info](https://github.com/meain/vim-package-info),
+The concept is copied from [vim-package-info](https://github.com/meain/vim-package-info) (thank you),
 but since that package wasn't working on my setup, and I really don't like debugging javascript
 on my free time, I rewrote it in Rust as an exercise.
 
@@ -13,24 +13,23 @@ a quick feedback if any dependency needs to be updated and how painful it will b
 
 ## How does it work
 Whenever you open a supported file (`cargo.toml`, `Pipfile` and `package.json` at the moment), the plugin will first
-look for a lockfile (only works with `yarn.lock` for js right now), then print the currently installed version after the line in the manifest file.
+look for a lockfile (only works with `yarn.lock` for js right now), then print the currently installed version after the
+dependency line in the manifest file.
 
-After that it will query the right store to retrieve the latest version available, and if there is a more recent version
-it will print and hihglight the latest version next to the current one.
+After that it will query the registry to retrieve the latest available version, and if there is a more recent one
+it will print and hihglight it next to the current one.
 
 ## Installation
-Since I want to finish a couple of things before studying how to write a plugin installable by neovim package managers, the process is manual right now.
+Since I want to finish a couple of things before studying how to make a repo installable by neovim package managers, the process is manual right now.
 
-You will need `~/.local/bin/` to be in PATH for this to work, or you can just copy the files manually.
-Read the script before executing it!
+You will need `~/.local/bin/` to be in `$PATH` for this to work, or you can just copy the files manually.
+Read the script before running it!
 
 `git clone github.com/psykopear/neovim-package-info`
 `cd neovim-package-info`
 `./install.sh`
 
 ## TODO
-[x] Send data to the correct buffer, instead of the current buffer
-[x] Check lockfile to know actually installed version
 [ ] Cache results for a while
 [ ] Check requirement and highlight if currently installed package does not match
 
