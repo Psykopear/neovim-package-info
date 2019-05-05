@@ -22,8 +22,10 @@ it will print and hihglight it next to the current one.
 ## Installation
 Since I want to finish a couple of things before studying how to make a repo installable by neovim package managers, the process is manual right now.
 
-You will need `~/.local/bin/` to be in `$PATH` for this to work, or you can just copy the files manually.
-Read the script before running it!
+Assumptions:
+- `~/.local/bin/` should exist and be in `$PATH`
+- `~/.config/nvim/plugin/` also should exist, and it should be the neovim config directory
+**Read the script before running it!**
 
 `git clone github.com/psykopear/neovim-package-info`
 `cd neovim-package-info`
