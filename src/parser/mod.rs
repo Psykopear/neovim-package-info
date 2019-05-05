@@ -132,7 +132,12 @@ impl Parser for CargoParser {
 
     fn get_dependencies(&self) -> Result<Vec<DependencyInfo>, Error> {
         let cargo_toml = self.parse_manifest()?;
-        let cargo_lock = self.parse_lockfile()?;
+        let cargo_lock = match self.parse_lockfile() {
+            Ok(lock) => lock,
+            Err(_) => Lockfile {
+                dependencies: HashMap::new(),
+            },
+        };
 
         // Concatenate all dependencie so we can parallelize network calls
         Ok(cargo_toml
@@ -150,13 +155,13 @@ impl Parser for CargoParser {
                         line_number,
                         name: name.to_string(),
                         current: version.to_string(),
-                        latest: vec![("...".to_string(), consts::GREY_HG.to_string())],
+                        latest: vec![(" ...".to_string(), consts::GREY_HG.to_string())],
                     }
                 } else {
                     DependencyInfo {
                         name: name.to_string(),
-                        current: "--".to_string(),
-                        latest: vec![("...".to_string(), consts::GREY_HG.to_string())],
+                        current: "0.0.0".to_string(),
+                        latest: vec![(" ...".to_string(), consts::GREY_HG.to_string())],
                         line_number,
                     }
                 }
@@ -188,7 +193,12 @@ impl Parser for PipfileParser {
 
     fn get_dependencies(&self) -> Result<Vec<DependencyInfo>, Error> {
         let pipfile = self.parse_manifest()?;
-        let piplock = self.parse_lockfile()?;
+        let piplock = match self.parse_lockfile() {
+            Ok(lock) => lock,
+            Err(_) => Lockfile {
+                dependencies: HashMap::new(),
+            },
+        };
 
         // Concatenate all dependencie so we can parallelize network calls
         Ok(pipfile
@@ -211,13 +221,13 @@ impl Parser for PipfileParser {
                         line_number,
                         name: name.to_string(),
                         current: v.as_str().to_string(),
-                        latest: vec![("...".to_string(), consts::GREY_HG.to_string())],
+                        latest: vec![(" ...".to_string(), consts::GREY_HG.to_string())],
                     }
                 } else {
                     DependencyInfo {
                         name: name.to_string(),
-                        current: "--".to_string(),
-                        latest: vec![("...".to_string(), consts::GREY_HG.to_string())],
+                        current: "0.0.0".to_string(),
+                        latest: vec![(" ...".to_string(), consts::GREY_HG.to_string())],
                         line_number,
                     }
                 }
@@ -250,7 +260,12 @@ impl Parser for PackageJsonParser {
 
     fn get_dependencies(&self) -> Result<Vec<DependencyInfo>, Error> {
         let package_json = self.parse_manifest()?;
-        let yarn_lock = self.parse_lockfile()?;
+        let yarn_lock = match self.parse_lockfile() {
+            Ok(lock) => lock,
+            Err(_) => Lockfile {
+                dependencies: HashMap::new(),
+            },
+        };
 
         // Concatenate all dependencie so we can parallelize network calls
         Ok(package_json
@@ -270,13 +285,13 @@ impl Parser for PackageJsonParser {
                         line_number,
                         name: name.to_string(),
                         current: v.as_str().to_string(),
-                        latest: vec![("...".to_string(), consts::GREY_HG.to_string())],
+                        latest: vec![(" ...".to_string(), consts::GREY_HG.to_string())],
                     }
                 } else {
                     DependencyInfo {
                         name: name.to_string(),
-                        current: "--".to_string(),
-                        latest: vec![("...".to_string(), consts::GREY_HG.to_string())],
+                        current: "0.0.0".to_string(),
+                        latest: vec![(" ...".to_string(), consts::GREY_HG.to_string())],
                         line_number,
                     }
                 }
