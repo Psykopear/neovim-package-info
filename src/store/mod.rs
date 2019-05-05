@@ -26,8 +26,8 @@ pub trait Store {
     // Check dependency and return a string
     fn check_dependency(&self, dep: &DependencyInfo) -> Vec<(String, String)> {
         if let Ok(store_version) = self.get_max_version(&dep.name) {
-            if let Ok(latest_version) = semver::Version::parse(&store_version) {
-                if let Ok(current) = semver::Version::parse(&dep.current) {
+            if let Ok(current) = semver::Version::parse(&dep.current) {
+                if let Ok(latest_version) = semver::Version::parse(&store_version) {
                     if latest_version.major > current.major {
                         vec![(
                             format!(" -> {}", latest_version),
@@ -64,10 +64,10 @@ pub trait Store {
                         vec![]
                     }
                 } else {
-                    vec![(store_version, consts::GREY_HG.to_string())]
+                    vec![(format!(" {}", store_version), consts::GREY_HG.to_string())]
                 }
             } else {
-                vec![(store_version, consts::GREY_HG.to_string())]
+                vec![(format!(" {}", store_version), consts::GREY_HG.to_string())]
             }
         } else {
             vec![(
@@ -78,6 +78,9 @@ pub trait Store {
     }
 }
 
+////////////////////////////////////
+// crates.io Store implementation //
+////////////////////////////////////
 pub struct Cratesio {
     pub name: String,
     pub base_url: String,
@@ -111,6 +114,9 @@ impl Store for Cratesio {
     }
 }
 
+///////////////////////////////
+// Pypi Store implementation //
+///////////////////////////////
 pub struct Pypi {
     pub name: String,
     pub base_url: String,
@@ -142,6 +148,9 @@ impl Store for Pypi {
     }
 }
 
+//////////////////////////////
+// NPM Store implementation //
+//////////////////////////////
 pub struct Npm {
     pub name: String,
     pub base_url: String,

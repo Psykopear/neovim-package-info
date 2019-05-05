@@ -9,8 +9,28 @@ let s:cargoToml = 'cargo-toml'
 let s:packageJson = 'package-json'
 let s:pipfile = 'pipfile'
 
+" Initialize RPC
+function! s:initRpc()
+    if s:packageInfoJobId == 0
+        let jobid = jobstart([s:bin], { 'rpc': v:true })
+        return jobid
+    else
+        return s:packageInfoJobId
+    endif
+endfunction
+
 function! s:sendMessage(...)
-    call rpcnotify(s:packageInfoJobId, a:1, a:2)
+    " Try sending message, if there is an error it should
+    " mean the process crashed for some reason, so we try
+    " to bring it back first
+    try
+        call rpcnotify(s:packageInfoJobId, a:1, a:2)
+    catch /.*/
+        let s:packageInfoJobId = 0
+        let id = s:initRpc()
+        let s:packageInfoJobId = id
+        call rpcnotify(s:packageInfoJobId, a:1, a:2)
+    endtry
 endfunction
 
 function! s:configureCommands()
@@ -20,16 +40,6 @@ function! s:configureCommands()
     autocmd BufEnter *package.json :call s:sendMessage(s:packageJson, expand("%:p"))
     autocmd BufEnter *Pipfile :call s:sendMessage(s:pipfile, expand("%:p"))
   augroup END
-endfunction
-
-" Initialize RPC
-function! s:initRpc()
-    if s:packageInfoJobId == 0
-        let jobid = jobstart([s:bin], { 'rpc': v:true })
-        return jobid
-    else
-        return s:packageInfoJobId
-    endif
 endfunction
 
 function! s:connect()
