@@ -33,13 +33,17 @@ impl From<String> for Messages {
 
 struct NeovimSession {
     pub nvim: Neovim,
+    pub buffer_number: i64,
 }
 
 impl NeovimSession {
     pub fn new() -> Self {
         let session = Session::new_parent().unwrap();
         let nvim = Neovim::new(session);
-        NeovimSession { nvim }
+        NeovimSession {
+            nvim,
+            buffer_number: 0,
+        }
     }
 
     pub fn echo(&mut self, message: &str) {
@@ -47,7 +51,20 @@ impl NeovimSession {
     }
 
     pub fn set_text(&mut self, messages: &Vec<(String, String)>, line_number: i64) {
-        if let Ok(buffer) = self.nvim.get_current_buf() {
+        // First search the buffer
+        let buffers = self.nvim.list_bufs().expect("Error listing buffers");
+        let mut buffer = None;
+        for buf in buffers {
+            if buf
+                .get_number(&mut self.nvim)
+                .expect("Error getting buffer number")
+                == self.buffer_number
+            {
+                buffer = Some(buf)
+            }
+        }
+        if let Some(buffer) = buffer {
+            // if let Ok(buffer) = self.nvim.get_current_buf() {
             let mut chunks: Vec<Value> = messages
                 .iter()
                 .map(|(message, highlight)| {
@@ -176,64 +193,70 @@ impl EventHandler {
         let receiver = nvim_session.start_event_loop_channel();
 
         for (event, args) in receiver {
-            if let Some(file_path) = args[0].as_str() {
-                if let Ok(content) = fs::read_to_string(&file_path) {
-                    match Messages::from(event) {
-                        Messages::CargoToml => {
-                            if let Ok(lockfile_content) =
-                                fs::read_to_string(file_path.replace(".toml", ".lock"))
-                            {
-                                match self.handle_cargo_toml(
-                                    &content,
-                                    &lockfile_content,
-                                    nvim_session,
-                                ) {
-                                    Ok(_) => (),
-                                    Err(error) => {
-                                        nvim_session.echo(&error.to_string());
-                                    }
-                                };
-                            } else {
-                                nvim_session.echo("Can't find lockfile");
-                            }
-                        }
-                        Messages::Pipfile => {
-                            // Parse lock file
-                            if let Ok(lockfile_content) =
-                                fs::read_to_string(format!("{}.lock", file_path))
-                            {
-                                match self.handle_pipfile(&content, &lockfile_content, nvim_session)
+            if let Some(buffer_number) = args[1].as_i64() {
+                nvim_session.buffer_number = buffer_number;
+                if let Some(file_path) = args[0].as_str() {
+                    if let Ok(content) = fs::read_to_string(&file_path) {
+                        match Messages::from(event) {
+                            Messages::CargoToml => {
+                                if let Ok(lockfile_content) =
+                                    fs::read_to_string(file_path.replace(".toml", ".lock"))
                                 {
-                                    Ok(_) => (),
-                                    Err(error) => {
-                                        nvim_session.echo(&error.to_string());
-                                    }
-                                };
-                            } else {
-                                nvim_session.echo("Can't find lockfile!");
+                                    match self.handle_cargo_toml(
+                                        &content,
+                                        &lockfile_content,
+                                        nvim_session,
+                                    ) {
+                                        Ok(_) => (),
+                                        Err(error) => {
+                                            nvim_session.echo(&error.to_string());
+                                        }
+                                    };
+                                } else {
+                                    nvim_session.echo("Can't find lockfile");
+                                }
                             }
-                        }
-                        Messages::PackageJson => {
-                            if let Ok(lockfile_content) =
-                                fs::read_to_string(file_path.replace("package.json", "yarn.lock"))
-                            {
-                                match self.handle_package_json(
-                                    &content,
-                                    &lockfile_content,
-                                    nvim_session,
+                            Messages::Pipfile => {
+                                // Parse lock file
+                                if let Ok(lockfile_content) =
+                                    fs::read_to_string(format!("{}.lock", file_path))
+                                {
+                                    match self.handle_pipfile(
+                                        &content,
+                                        &lockfile_content,
+                                        nvim_session,
+                                    ) {
+                                        Ok(_) => (),
+                                        Err(error) => {
+                                            nvim_session.echo(&error.to_string());
+                                        }
+                                    };
+                                } else {
+                                    nvim_session.echo("Can't find lockfile!");
+                                }
+                            }
+                            Messages::PackageJson => {
+                                if let Ok(lockfile_content) = fs::read_to_string(
+                                    file_path.replace("package.json", "yarn.lock"),
                                 ) {
-                                    Ok(_) => (),
-                                    Err(error) => {
-                                        nvim_session.echo(&error.to_string());
-                                    }
-                                };
-                            } else {
-                                nvim_session.echo("Can't find lockfile");
+                                    match self.handle_package_json(
+                                        &content,
+                                        &lockfile_content,
+                                        nvim_session,
+                                    ) {
+                                        Ok(_) => (),
+                                        Err(error) => {
+                                            nvim_session.echo(&error.to_string());
+                                        }
+                                    };
+                                } else {
+                                    nvim_session.echo("Can't find lockfile");
+                                }
                             }
-                        }
-                        Messages::Unknown(event) => {
-                            nvim_session
-                                .echo(&format!("Unkown command: {}, args: {:?}", event, args));
+                            Messages::Unknown(event) => {
+                                nvim_session
+                                    .echo(&format!("Unkown command: {}, args: {:?}", event, args));
+                            }
                         }
                     }
                 }

@@ -24,21 +24,21 @@ function! s:sendMessage(...)
     " mean the process crashed for some reason, so we try
     " to bring it back first
     try
-        call rpcnotify(s:packageInfoJobId, a:1, a:2)
+        call rpcnotify(s:packageInfoJobId, a:1, a:2, a:3)
     catch /.*/
         let s:packageInfoJobId = 0
         let id = s:initRpc()
         let s:packageInfoJobId = id
-        call rpcnotify(s:packageInfoJobId, a:1, a:2)
+        call rpcnotify(s:packageInfoJobId, a:1, a:2, a:3)
     endtry
 endfunction
 
 function! s:configureCommands()
   augroup packageInfo
     autocmd!
-    autocmd BufEnter *Cargo.toml :call s:sendMessage(s:cargoToml, expand("%:p"))
-    autocmd BufEnter *package.json :call s:sendMessage(s:packageJson, expand("%:p"))
-    autocmd BufEnter *Pipfile :call s:sendMessage(s:pipfile, expand("%:p"))
+    autocmd BufEnter *Cargo.toml :call s:sendMessage(s:cargoToml, expand("%:p"), bufnr("%"))
+    autocmd BufEnter *package.json :call s:sendMessage(s:packageJson, expand("%:p"), bufnr("%"))
+    autocmd BufEnter *Pipfile :call s:sendMessage(s:pipfile, expand("%:p"), bufnr("%"))
   augroup END
 endfunction
 
