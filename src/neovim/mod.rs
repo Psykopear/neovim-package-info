@@ -64,7 +64,6 @@ impl NeovimSession {
             }
         }
         if let Some(buffer) = buffer {
-            // if let Ok(buffer) = self.nvim.get_current_buf() {
             let mut chunks: Vec<Value> = messages
                 .iter()
                 .map(|(message, highlight)| {

@@ -3,7 +3,7 @@ if !exists('s:packageInfoJobId')
     let s:packageInfoJobId = 0
 endif
 
-let s:bin = '~/.local/bin/package-info-rs'
+let s:bin = expand('$HOME/.local/bin/package-info-rs')
 
 let s:cargoToml = 'cargo-toml'
 let s:packageJson = 'package-json'

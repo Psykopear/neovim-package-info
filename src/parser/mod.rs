@@ -259,7 +259,7 @@ impl Parser for PackageJsonParser {
             .map(|name| {
                 let mut line_number: i64 = 0;
                 for (index, line) in self.manifest_content.split("\n").enumerate() {
-                    if line.to_string().contains(&format!("\"{}\": ", name)) {
+                    if line.to_string().contains(&format!("\"{}\": \"", name)) {
                         line_number = index as i64
                     }
                 }
