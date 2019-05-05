@@ -84,7 +84,6 @@ pub trait Store {
 pub struct Cratesio {
     pub name: String,
     pub base_url: String,
-    pub namespace: i64,
 }
 
 impl Store for Cratesio {
@@ -92,7 +91,6 @@ impl Store for Cratesio {
         Self {
             name: "crates.io".to_string(),
             base_url: "https://crates.io/api/v1/crates/{package}".to_string(),
-            namespace: 0,
         }
     }
 

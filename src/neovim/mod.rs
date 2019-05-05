@@ -2,6 +2,7 @@ use crate::consts;
 use crate::parser::{CargoParser, PackageJsonParser, Parser, PipfileParser};
 use crate::store::{Cratesio, Npm, Pypi, Store};
 use failure::Error;
+use neovim_lib::neovim_api::Buffer;
 use neovim_lib::{Neovim, NeovimApi, Session, Value};
 use rayon::prelude::*;
 use std::fs;
@@ -50,20 +51,22 @@ impl NeovimSession {
         self.nvim.command(&format!("echo \"{}\"", message)).unwrap();
     }
 
-    pub fn set_text(&mut self, messages: &Vec<(String, String)>, line_number: i64) {
-        // First search the buffer
+    fn get_buffer(&mut self) -> Option<Buffer> {
         let buffers = self.nvim.list_bufs().expect("Error listing buffers");
-        let mut buffer = None;
         for buf in buffers {
             if buf
                 .get_number(&mut self.nvim)
                 .expect("Error getting buffer number")
                 == self.buffer_number
             {
-                buffer = Some(buf)
+                return Some(buf);
             }
         }
-        if let Some(buffer) = buffer {
+        None
+    }
+
+    pub fn set_text(&mut self, messages: &Vec<(String, String)>, line_number: i64) {
+        if let Some(buffer) = self.get_buffer() {
             let mut chunks: Vec<Value> = messages
                 .iter()
                 .map(|(message, highlight)| {
