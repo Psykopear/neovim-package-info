@@ -1,4 +1,4 @@
-# Neovim dependency check
+# Neovim package info
 
 ![Screenshot 1](images/cargotoml.png)
 ![Screenshot 2](images/pipfile.png)
