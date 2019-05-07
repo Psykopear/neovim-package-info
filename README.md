@@ -1,5 +1,7 @@
 # Neovim dependency check
 
+![Screenshot 1](images/cargotoml.png)
+
 The concept is copied from [vim-package-info](https://github.com/meain/vim-package-info) (thank you),
 but since that package wasn't working on my setup, and I really don't like debugging javascript
 on my free time, I rewrote it in Rust as an exercise.
