@@ -31,9 +31,11 @@ Assumptions:
 
 **Read the script before running it!**
 
-`git clone github.com/psykopear/neovim-package-info`
-`cd neovim-package-info`
-`./install.sh`
+```
+git clone github.com/psykopear/neovim-package-info
+cd neovim-package-info
+./install.sh
+```
 
 ## TODO
 - [ ] Cache results for a while
