@@ -1,6 +1,8 @@
 # Neovim dependency check
 
 ![Screenshot 1](images/cargotoml.png)
+![Screenshot 2](images/pipfile.png)
+![Screenshot 3](images/packagejson.png)
 
 The concept is copied from [vim-package-info](https://github.com/meain/vim-package-info) (thank you),
 but since that package wasn't working on my setup, and I really don't like debugging javascript
