@@ -41,6 +41,3 @@ cd neovim-package-info
 - [ ] Cache results for a while
 - [ ] Check requirement and highlight if currently installed package does not match
 - [ ] Make colors configurable
-
-## Notes
-Don't misunderstand me, I hate JS, but also its community
