@@ -1,6 +1,5 @@
 # Neovim dependency check
 
-## Prelude
 The concept is copied from [vim-package-info](https://github.com/meain/vim-package-info) (thank you),
 but since that package wasn't working on my setup, and I really don't like debugging javascript
 on my free time, I rewrote it in Rust as an exercise.
@@ -25,6 +24,7 @@ Since I want to finish a couple of things before studying how to make a repo ins
 Assumptions:
 - `~/.local/bin/` should exist and be in `$PATH`
 - `~/.config/nvim/plugin/` also should exist, and it should be the neovim config directory
+
 **Read the script before running it!**
 
 `git clone github.com/psykopear/neovim-package-info`
@@ -32,8 +32,8 @@ Assumptions:
 `./install.sh`
 
 ## TODO
-[ ] Cache results for a while
-[ ] Check requirement and highlight if currently installed package does not match
+- [ ] Cache results for a while
+- [ ] Check requirement and highlight if currently installed package does not match
 
 ## Notes
 Don't misunderstand me, I hate JS, but also its community
