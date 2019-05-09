@@ -5,6 +5,7 @@ use failure::Error;
 use neovim_lib::neovim_api::Buffer;
 use neovim_lib::{Neovim, NeovimApi, Session, Value};
 use rayon::prelude::*;
+use semver;
 use std::fs;
 
 pub struct DependencyInfo {
@@ -184,10 +185,27 @@ impl EventHandler {
 
     fn handle_generic(&self, dependencies: &Vec<DependencyInfo>, nvim_session: &mut NeovimSession) {
         for dep in dependencies {
-            let mut lines = vec![
-                // (dep.requirement.to_string(), consts::RED_HG.to_string()),
-                (dep.current.to_string(), consts::GREY_HG.to_string()),
-            ];
+            let mut lines: Vec<(String, String)> = vec![];
+            if let Ok(requirement) = semver::VersionReq::parse(&dep.requirement) {
+                if let Ok(current) = semver::Version::parse(&dep.current) {
+                    if requirement.matches(&current) {
+                        lines.append(&mut vec![(
+                            dep.current.to_string(),
+                            consts::GREY_HG.to_string(),
+                        )])
+                    } else {
+                        lines.append(&mut vec![(
+                            dep.current.to_string(),
+                            consts::RED_HG.to_string(),
+                        )]);
+                    }
+                }
+            } else {
+                lines.append(&mut vec![(
+                    dep.current.to_string(),
+                    consts::GREY_HG.to_string(),
+                )]);
+            }
             lines.append(&mut dep.latest.clone());
             nvim_session.set_text(&lines, dep.line_number);
         }
@@ -206,7 +224,6 @@ impl EventHandler {
                                 let lockfile_content =
                                     fs::read_to_string(file_path.replace(".toml", ".lock"))
                                         .unwrap_or("".to_string());
-                                nvim_session.echo("CIAOOOO");
                                 match self.handle_cargo_toml(
                                     &content,
                                     &lockfile_content,
