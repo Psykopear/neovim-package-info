@@ -9,6 +9,7 @@ use std::fs;
 
 pub struct DependencyInfo {
     pub name: String,
+    pub requirement: String,
     pub current: String,
     pub latest: Vec<(String, String)>,
     pub line_number: i64,
@@ -123,6 +124,7 @@ impl EventHandler {
         let latest_dependencies = dependencies
             .par_iter()
             .map(|dep| DependencyInfo {
+                requirement: dep.requirement.clone(),
                 current: dep.current.clone(),
                 line_number: dep.line_number,
                 name: dep.name.clone(),
@@ -145,6 +147,7 @@ impl EventHandler {
         let latest_dependencies = dependencies
             .par_iter()
             .map(|dep| DependencyInfo {
+                requirement: dep.requirement.clone(),
                 current: dep.current.clone(),
                 line_number: dep.line_number,
                 name: dep.name.clone(),
@@ -167,6 +170,7 @@ impl EventHandler {
         let latest_dependencies = dependencies
             .par_iter()
             .map(|dep| DependencyInfo {
+                requirement: dep.requirement.clone(),
                 current: dep.current.clone(),
                 line_number: dep.line_number,
                 name: dep.name.clone(),
@@ -180,7 +184,10 @@ impl EventHandler {
 
     fn handle_generic(&self, dependencies: &Vec<DependencyInfo>, nvim_session: &mut NeovimSession) {
         for dep in dependencies {
-            let mut lines = vec![(dep.current.to_string(), consts::GREY_HG.to_string())];
+            let mut lines = vec![
+                // (dep.requirement.to_string(), consts::RED_HG.to_string()),
+                (dep.current.to_string(), consts::GREY_HG.to_string()),
+            ];
             lines.append(&mut dep.latest.clone());
             nvim_session.set_text(&lines, dep.line_number);
         }
@@ -199,6 +206,7 @@ impl EventHandler {
                                 let lockfile_content =
                                     fs::read_to_string(file_path.replace(".toml", ".lock"))
                                         .unwrap_or("".to_string());
+                                nvim_session.echo("CIAOOOO");
                                 match self.handle_cargo_toml(
                                     &content,
                                     &lockfile_content,

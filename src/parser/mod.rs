@@ -5,20 +5,21 @@ use crate::consts;
 use crate::neovim::DependencyInfo;
 use cargo_toml;
 use failure::Error;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 pub struct Manifest {
-    dependencies: Vec<String>,
+    dependencies: Vec<(String, String)>,
 }
 
 impl From<cargo_toml::Manifest> for Manifest {
     fn from(cargo_toml_manifest: cargo_toml::Manifest) -> Manifest {
-        let dependencies: Vec<String> = cargo_toml_manifest
+        let dependencies: Vec<(String, String)> = cargo_toml_manifest
             .dependencies
             .iter()
             .chain(cargo_toml_manifest.dev_dependencies.iter())
             .chain(cargo_toml_manifest.build_dependencies.iter())
-            .map(|(name, _)| name.to_string())
+            .map(|(name, requirement)| (name.to_string(), requirement.req().to_string()))
             .collect();
         Manifest { dependencies }
     }
@@ -26,11 +27,11 @@ impl From<cargo_toml::Manifest> for Manifest {
 
 impl From<pipfile::Pipfile> for Manifest {
     fn from(pipfile: pipfile::Pipfile) -> Manifest {
-        let dependencies: Vec<String> = pipfile
+        let dependencies: Vec<(String, String)> = pipfile
             .dependencies
             .iter()
             .chain(pipfile.dev_dependencies.iter())
-            .map(|(name, _)| name.to_string())
+            .map(|(name, requirement)| (name.to_string(), requirement.to_string()))
             .collect();
         Manifest { dependencies }
     }
@@ -38,11 +39,11 @@ impl From<pipfile::Pipfile> for Manifest {
 
 impl From<package_json::PackageJson> for Manifest {
     fn from(package_json: package_json::PackageJson) -> Manifest {
-        let dependencies: Vec<String> = package_json
+        let dependencies: Vec<(String, String)> = package_json
             .dependencies
             .iter()
             .chain(package_json.dev_dependencies.iter())
-            .map(|(name, _)| name.to_string())
+            .map(|(name, requirement)| (name.to_string(), requirement.to_string()))
             .collect();
         Manifest { dependencies }
     }
@@ -80,21 +81,26 @@ impl From<package_json::YarnLock> for Lockfile {
     }
 }
 
-impl From<HashMap<String, toml::Value>> for Lockfile {
-    fn from(cargo_lock: HashMap<String, toml::Value>) -> Lockfile {
-        let packages: Vec<toml::Value> =
-            if let Ok(packages) = cargo_lock["package"].clone().try_into() {
-                packages
-            } else {
-                vec![]
-            };
+#[derive(Serialize, Deserialize)]
+pub struct Cargolock {
+    pub package: Vec<toml::Value>,
+}
+
+impl From<Cargolock> for Lockfile {
+    fn from(cargo_lock: Cargolock) -> Lockfile {
+        let packages: Vec<toml::Value> = cargo_lock.package.into();
         let dependencies: HashMap<_, _> = packages
             .iter()
             .map(|p| {
-                (
-                    p["name"].as_str().expect("").to_string(),
-                    p["version"].as_str().expect("").to_string(),
-                )
+                if let Some(name) = p["name"].as_str() {
+                    if let Some(version) = p["version"].as_str() {
+                        (name.to_string(), version.to_string())
+                    } else {
+                        (name.to_string(), "0.0.0".to_string())
+                    }
+                } else {
+                    ("error".to_string(), "0.0.0".to_string())
+                }
             })
             .collect();
         Lockfile { dependencies }
@@ -126,24 +132,24 @@ impl Parser for CargoParser {
     }
 
     fn parse_lockfile(&self) -> Result<Lockfile, Error> {
-        let cargo_lock: HashMap<String, toml::Value> = toml::from_str(&self.lockfile_content)?;
+        if self.lockfile_content == "" {
+            return Ok(Lockfile {
+                dependencies: HashMap::new(),
+            });
+        }
+        let cargo_lock: Cargolock = toml::from_str(&self.lockfile_content)?;
         Ok(cargo_lock.into())
     }
 
     fn get_dependencies(&self) -> Result<Vec<DependencyInfo>, Error> {
         let cargo_toml = self.parse_manifest()?;
-        let cargo_lock = match self.parse_lockfile() {
-            Ok(lock) => lock,
-            Err(_) => Lockfile {
-                dependencies: HashMap::new(),
-            },
-        };
+        let cargo_lock = self.parse_lockfile()?;
 
         // Concatenate all dependencie so we can parallelize network calls
         Ok(cargo_toml
             .dependencies
             .iter()
-            .map(|name| {
+            .map(|(name, requirement)| {
                 let mut line_number: i64 = 0;
                 for (index, line) in self.manifest_content.split("\n").enumerate() {
                     if line.to_string().starts_with(&format!("{} = ", name)) {
@@ -153,16 +159,18 @@ impl Parser for CargoParser {
                 if let Some(version) = cargo_lock.dependencies.get(name) {
                     DependencyInfo {
                         line_number,
+                        requirement: requirement.to_string(),
                         name: name.to_string(),
                         current: version.to_string(),
                         latest: vec![(" ...".to_string(), consts::GREY_HG.to_string())],
                     }
                 } else {
                     DependencyInfo {
+                        line_number,
+                        requirement: requirement.to_string(),
                         name: name.to_string(),
                         current: "0.0.0".to_string(),
                         latest: vec![(" ...".to_string(), consts::GREY_HG.to_string())],
-                        line_number,
                     }
                 }
             })
@@ -204,7 +212,7 @@ impl Parser for PipfileParser {
         Ok(pipfile
             .dependencies
             .iter()
-            .map(|name| {
+            .map(|(name, requirement)| {
                 let mut line_number: i64 = 0;
                 for (index, line) in self.manifest_content.split("\n").enumerate() {
                     if line.to_string().starts_with(&format!("{} = ", name))
@@ -219,16 +227,18 @@ impl Parser for PipfileParser {
                     v.next();
                     DependencyInfo {
                         line_number,
+                        requirement: requirement.to_string(),
                         name: name.to_string(),
                         current: v.as_str().to_string(),
                         latest: vec![(" ...".to_string(), consts::GREY_HG.to_string())],
                     }
                 } else {
                     DependencyInfo {
+                        line_number,
+                        requirement: requirement.to_string(),
                         name: name.to_string(),
                         current: "0.0.0".to_string(),
                         latest: vec![(" ...".to_string(), consts::GREY_HG.to_string())],
-                        line_number,
                     }
                 }
             })
@@ -271,7 +281,7 @@ impl Parser for PackageJsonParser {
         Ok(package_json
             .dependencies
             .iter()
-            .map(|name| {
+            .map(|(name, requirement)| {
                 let mut line_number: i64 = 0;
                 for (index, line) in self.manifest_content.split("\n").enumerate() {
                     if line.to_string().contains(&format!("\"{}\": \"", name)) {
@@ -283,16 +293,18 @@ impl Parser for PackageJsonParser {
                     v.next();
                     DependencyInfo {
                         line_number,
+                        requirement: requirement.to_string(),
                         name: name.to_string(),
                         current: v.as_str().to_string(),
                         latest: vec![(" ...".to_string(), consts::GREY_HG.to_string())],
                     }
                 } else {
                     DependencyInfo {
+                        line_number,
+                        requirement: requirement.to_string(),
                         name: name.to_string(),
                         current: "0.0.0".to_string(),
                         latest: vec![(" ...".to_string(), consts::GREY_HG.to_string())],
-                        line_number,
                     }
                 }
             })
