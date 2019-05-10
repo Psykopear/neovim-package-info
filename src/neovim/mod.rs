@@ -6,6 +6,7 @@ use neovim_lib::neovim_api::Buffer;
 use neovim_lib::{Neovim, NeovimApi, Session, Value};
 use rayon::prelude::*;
 use semver;
+use std::collections::HashMap;
 use std::fs;
 
 pub struct DependencyInfo {
@@ -102,20 +103,31 @@ impl EventHandler {
         content: &str,
         lockfile_content: &str,
         nvim_session: &mut NeovimSession,
+        cache: &mut HashMap<String, Vec<(String, String)>>,
     ) -> Result<(), Error> {
         let dependencies: Vec<DependencyInfo> =
             CargoParser::get_dependencies(&content, &lockfile_content)?;
+        let dependencies = dependencies
+            .into_iter()
+            .filter(|dep| !cache.contains_key(&dep.name))
+            .collect();
         Self::handle_generic(&dependencies, nvim_session);
-        let latest_dependencies = dependencies
+        let latest_dependencies: Vec<DependencyInfo> = dependencies
             .par_iter()
             .map(|dep| DependencyInfo {
                 requirement: dep.requirement.clone(),
                 current: dep.current.clone(),
                 line_number: dep.line_number,
                 name: dep.name.clone(),
-                latest: Cratesio::check_dependency(&dep),
+                latest: match cache.get(&dep.name) {
+                    Some(latest) => latest.clone(),
+                    None => Cratesio::check_dependency(&dep),
+                },
             })
             .collect();
+        for dep in latest_dependencies.iter() {
+            cache.insert(dep.name.clone(), dep.latest.clone());
+        }
         Self::handle_generic(&latest_dependencies, nvim_session);
         Ok(())
     }
@@ -124,20 +136,31 @@ impl EventHandler {
         content: &str,
         lockfile_content: &str,
         nvim_session: &mut NeovimSession,
+        cache: &mut HashMap<String, Vec<(String, String)>>,
     ) -> Result<(), Error> {
         let dependencies: Vec<DependencyInfo> =
             PipfileParser::get_dependencies(&content, &lockfile_content)?;
+        let dependencies = dependencies
+            .into_iter()
+            .filter(|dep| !cache.contains_key(&dep.name))
+            .collect();
         Self::handle_generic(&dependencies, nvim_session);
-        let latest_dependencies = dependencies
+        let latest_dependencies: Vec<DependencyInfo> = dependencies
             .par_iter()
             .map(|dep| DependencyInfo {
                 requirement: dep.requirement.clone(),
                 current: dep.current.clone(),
                 line_number: dep.line_number,
                 name: dep.name.clone(),
-                latest: Pypi::check_dependency(&dep),
+                latest: match cache.get(&dep.name) {
+                    Some(latest) => latest.clone(),
+                    None => Pypi::check_dependency(&dep),
+                },
             })
             .collect();
+        for dep in latest_dependencies.iter() {
+            cache.insert(dep.name.clone(), dep.latest.clone());
+        }
         Self::handle_generic(&latest_dependencies, nvim_session);
         Ok(())
     }
@@ -146,20 +169,31 @@ impl EventHandler {
         content: &str,
         lockfile_content: &str,
         nvim_session: &mut NeovimSession,
+        cache: &mut HashMap<String, Vec<(String, String)>>,
     ) -> Result<(), Error> {
         let dependencies: Vec<DependencyInfo> =
             PackageJsonParser::get_dependencies(&content, &lockfile_content)?;
+        let dependencies = dependencies
+            .into_iter()
+            .filter(|dep| !cache.contains_key(&dep.name))
+            .collect();
         Self::handle_generic(&dependencies, nvim_session);
-        let latest_dependencies = dependencies
+        let latest_dependencies: Vec<DependencyInfo> = dependencies
             .par_iter()
             .map(|dep| DependencyInfo {
                 requirement: dep.requirement.clone(),
                 current: dep.current.clone(),
                 line_number: dep.line_number,
                 name: dep.name.clone(),
-                latest: Npm::check_dependency(&dep),
+                latest: match cache.get(&dep.name) {
+                    Some(latest) => latest.clone(),
+                    None => Npm::check_dependency(&dep),
+                },
             })
             .collect();
+        for dep in latest_dependencies.iter() {
+            cache.insert(dep.name.clone(), dep.latest.clone());
+        }
         Self::handle_generic(&latest_dependencies, nvim_session);
 
         Ok(())
@@ -168,8 +202,12 @@ impl EventHandler {
     fn handle_generic(dependencies: &Vec<DependencyInfo>, nvim_session: &mut NeovimSession) {
         for dep in dependencies {
             let mut lines: Vec<(String, String)> = vec![];
-            if let Ok(requirement) = semver::VersionReq::parse(&dep.requirement) {
-                if let Ok(current) = semver::Version::parse(&dep.current) {
+            match semver::VersionReq::parse(&dep.requirement) {
+                Ok(requirement) => {
+                    let current = match semver::Version::parse(&dep.current) {
+                        Ok(current) => current,
+                        _ => continue,
+                    };
                     if requirement.matches(&current) {
                         lines.append(&mut vec![(
                             dep.current.to_string(),
@@ -182,12 +220,13 @@ impl EventHandler {
                         )]);
                     }
                 }
-            } else {
-                lines.append(&mut vec![(
-                    dep.current.to_string(),
-                    consts::GREY_HG.to_string(),
-                )]);
-            }
+                _ => {
+                    lines.append(&mut vec![(
+                        dep.current.to_string(),
+                        consts::GREY_HG.to_string(),
+                    )]);
+                }
+            };
             lines.append(&mut dep.latest.clone());
             nvim_session.set_text(&lines, dep.line_number);
         }
@@ -195,66 +234,73 @@ impl EventHandler {
 
     fn recv(nvim_session: &mut NeovimSession) {
         let receiver = nvim_session.start_event_loop_channel();
+        let mut cargo_cache: HashMap<String, Vec<(String, String)>> = HashMap::new();
+        let mut pypi_cache: HashMap<String, Vec<(String, String)>> = HashMap::new();
+        let mut npm_cache: HashMap<String, Vec<(String, String)>> = HashMap::new();
 
         for (event, args) in receiver {
-            if let Some(buffer_number) = args[1].as_i64() {
-                nvim_session.buffer_number = buffer_number;
-                if let Some(file_path) = args[0].as_str() {
-                    if let Ok(content) = fs::read_to_string(&file_path) {
-                        match Messages::from(event) {
-                            Messages::CargoToml => {
-                                let lockfile_content =
-                                    fs::read_to_string(file_path.replace(".toml", ".lock"))
-                                        .unwrap_or("".to_string());
-                                match Self::handle_cargo_toml(
-                                    &content,
-                                    &lockfile_content,
-                                    nvim_session,
-                                ) {
-                                    Ok(_) => (),
-                                    Err(error) => {
-                                        nvim_session.echo(&error.to_string());
-                                    }
-                                };
-                            }
-                            Messages::Pipfile => {
-                                // Parse lock file, or use an empty string
-                                let lockfile_content =
-                                    fs::read_to_string(format!("{}.lock", file_path))
-                                        .unwrap_or("".to_string());
-                                match Self::handle_pipfile(
-                                    &content,
-                                    &lockfile_content,
-                                    nvim_session,
-                                ) {
-                                    Ok(_) => (),
-                                    Err(error) => {
-                                        nvim_session.echo(&error.to_string());
-                                    }
-                                };
-                            }
-                            Messages::PackageJson => {
-                                let lockfile_content = fs::read_to_string(
-                                    file_path.replace("package.json", "yarn.lock"),
-                                )
-                                .unwrap_or("".to_string());
-                                match Self::handle_package_json(
-                                    &content,
-                                    &lockfile_content,
-                                    nvim_session,
-                                ) {
-                                    Ok(_) => (),
-                                    Err(error) => {
-                                        nvim_session.echo(&error.to_string());
-                                    }
-                                };
-                            }
-                            Messages::Unknown(event) => {
-                                nvim_session
-                                    .echo(&format!("Unkown command: {}, args: {:?}", event, args));
-                            }
+            nvim_session.buffer_number = match args[1].as_i64() {
+                Some(number) => number,
+                _ => continue,
+            };
+            let file_path = match args[0].as_str() {
+                Some(file_path) => file_path,
+                _ => continue,
+            };
+            let manifest_content = match fs::read_to_string(&file_path) {
+                Ok(content) => content,
+                _ => continue,
+            };
+            match Messages::from(event) {
+                Messages::CargoToml => {
+                    let lockfile_content = fs::read_to_string(file_path.replace(".toml", ".lock"))
+                        .unwrap_or("".to_string());
+                    match Self::handle_cargo_toml(
+                        &manifest_content,
+                        &lockfile_content,
+                        nvim_session,
+                        &mut cargo_cache,
+                    ) {
+                        Ok(_) => (),
+                        Err(error) => {
+                            nvim_session.echo(&error.to_string());
                         }
-                    }
+                    };
+                }
+                Messages::Pipfile => {
+                    // Parse lock file, or use an empty string
+                    let lockfile_content =
+                        fs::read_to_string(format!("{}.lock", file_path)).unwrap_or("".to_string());
+                    match Self::handle_pipfile(
+                        &manifest_content,
+                        &lockfile_content,
+                        nvim_session,
+                        &mut pypi_cache,
+                    ) {
+                        Ok(_) => (),
+                        Err(error) => {
+                            nvim_session.echo(&error.to_string());
+                        }
+                    };
+                }
+                Messages::PackageJson => {
+                    let lockfile_content =
+                        fs::read_to_string(file_path.replace("package.json", "yarn.lock"))
+                            .unwrap_or("".to_string());
+                    match Self::handle_package_json(
+                        &manifest_content,
+                        &lockfile_content,
+                        nvim_session,
+                        &mut npm_cache,
+                    ) {
+                        Ok(_) => (),
+                        Err(error) => {
+                            nvim_session.echo(&error.to_string());
+                        }
+                    };
+                }
+                Messages::Unknown(event) => {
+                    nvim_session.echo(&format!("Unkown command: {}, args: {:?}", event, args));
                 }
             }
         }

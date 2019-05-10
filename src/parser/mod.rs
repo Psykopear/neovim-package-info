@@ -157,7 +157,8 @@ impl Parser for CargoParser {
                         requirement: requirement.to_string(),
                         name: name.to_string(),
                         current: version.to_string(),
-                        latest: vec![(" ...".to_string(), consts::GREY_HG.to_string())],
+                        // latest: vec![(" ...".to_string(), consts::GREY_HG.to_string())],
+                        latest: vec![(" ".to_string(), consts::GREY_HG.to_string())],
                     }
                 } else {
                     DependencyInfo {
@@ -165,7 +166,8 @@ impl Parser for CargoParser {
                         requirement: requirement.to_string(),
                         name: name.to_string(),
                         current: "0.0.0".to_string(),
-                        latest: vec![(" ...".to_string(), consts::GREY_HG.to_string())],
+                        // latest: vec![(" ...".to_string(), consts::GREY_HG.to_string())],
+                        latest: vec![(" ".to_string(), consts::GREY_HG.to_string())],
                     }
                 }
             })
@@ -218,7 +220,8 @@ impl Parser for PipfileParser {
                         requirement: requirement.to_string(),
                         name: name.to_string(),
                         current: v.as_str().to_string(),
-                        latest: vec![(" ...".to_string(), consts::GREY_HG.to_string())],
+                        // latest: vec![(" ...".to_string(), consts::GREY_HG.to_string())],
+                        latest: vec![(" ".to_string(), consts::GREY_HG.to_string())],
                     }
                 } else {
                     DependencyInfo {
@@ -226,7 +229,8 @@ impl Parser for PipfileParser {
                         requirement: requirement.to_string(),
                         name: name.to_string(),
                         current: "0.0.0".to_string(),
-                        latest: vec![(" ...".to_string(), consts::GREY_HG.to_string())],
+                        // latest: vec![(" ...".to_string(), consts::GREY_HG.to_string())],
+                        latest: vec![(" ".to_string(), consts::GREY_HG.to_string())],
                     }
                 }
             })
@@ -277,7 +281,8 @@ impl Parser for PackageJsonParser {
                         requirement: requirement.to_string(),
                         name: name.to_string(),
                         current: v.as_str().to_string(),
-                        latest: vec![(" ...".to_string(), consts::GREY_HG.to_string())],
+                        // latest: vec![(" ...".to_string(), consts::GREY_HG.to_string())],
+                        latest: vec![(" ".to_string(), consts::GREY_HG.to_string())],
                     }
                 } else {
                     DependencyInfo {
@@ -285,7 +290,8 @@ impl Parser for PackageJsonParser {
                         requirement: requirement.to_string(),
                         name: name.to_string(),
                         current: "0.0.0".to_string(),
-                        latest: vec![(" ...".to_string(), consts::GREY_HG.to_string())],
+                        // latest: vec![(" ...".to_string(), consts::GREY_HG.to_string())],
+                        latest: vec![(" ".to_string(), consts::GREY_HG.to_string())],
                     }
                 }
             })
