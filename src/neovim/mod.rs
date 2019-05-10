@@ -95,33 +95,17 @@ impl NeovimSession {
     }
 }
 
-struct EventHandler {
-    cratesio: Cratesio,
-    npm: Npm,
-    pypi: Pypi,
-}
+struct EventHandler;
 
 impl EventHandler {
-    fn new() -> Self {
-        let cratesio = Cratesio::new();
-        let pypi = Pypi::new();
-        let npm = Npm::new();
-        EventHandler {
-            cratesio,
-            pypi,
-            npm,
-        }
-    }
-
     fn handle_cargo_toml(
-        &self,
         content: &str,
         lockfile_content: &str,
         nvim_session: &mut NeovimSession,
     ) -> Result<(), Error> {
-        let cargo_parser = CargoParser::new(&content, &lockfile_content);
-        let dependencies: Vec<DependencyInfo> = cargo_parser.get_dependencies()?;
-        self.handle_generic(&dependencies, nvim_session);
+        let dependencies: Vec<DependencyInfo> =
+            CargoParser::get_dependencies(&content, &lockfile_content)?;
+        Self::handle_generic(&dependencies, nvim_session);
         let latest_dependencies = dependencies
             .par_iter()
             .map(|dep| DependencyInfo {
@@ -129,22 +113,21 @@ impl EventHandler {
                 current: dep.current.clone(),
                 line_number: dep.line_number,
                 name: dep.name.clone(),
-                latest: self.cratesio.check_dependency(&dep),
+                latest: Cratesio::check_dependency(&dep),
             })
             .collect();
-        self.handle_generic(&latest_dependencies, nvim_session);
+        Self::handle_generic(&latest_dependencies, nvim_session);
         Ok(())
     }
 
     fn handle_pipfile(
-        &self,
         content: &str,
         lockfile_content: &str,
         nvim_session: &mut NeovimSession,
     ) -> Result<(), Error> {
-        let pipfile_parser = PipfileParser::new(&content, &lockfile_content);
-        let dependencies: Vec<DependencyInfo> = pipfile_parser.get_dependencies()?;
-        self.handle_generic(&dependencies, nvim_session);
+        let dependencies: Vec<DependencyInfo> =
+            PipfileParser::get_dependencies(&content, &lockfile_content)?;
+        Self::handle_generic(&dependencies, nvim_session);
         let latest_dependencies = dependencies
             .par_iter()
             .map(|dep| DependencyInfo {
@@ -152,22 +135,21 @@ impl EventHandler {
                 current: dep.current.clone(),
                 line_number: dep.line_number,
                 name: dep.name.clone(),
-                latest: self.pypi.check_dependency(&dep),
+                latest: Pypi::check_dependency(&dep),
             })
             .collect();
-        self.handle_generic(&latest_dependencies, nvim_session);
+        Self::handle_generic(&latest_dependencies, nvim_session);
         Ok(())
     }
 
     fn handle_package_json(
-        &self,
         content: &str,
         lockfile_content: &str,
         nvim_session: &mut NeovimSession,
     ) -> Result<(), Error> {
-        let package_json_parser = PackageJsonParser::new(&content, &lockfile_content);
-        let dependencies: Vec<DependencyInfo> = package_json_parser.get_dependencies()?;
-        self.handle_generic(&dependencies, nvim_session);
+        let dependencies: Vec<DependencyInfo> =
+            PackageJsonParser::get_dependencies(&content, &lockfile_content)?;
+        Self::handle_generic(&dependencies, nvim_session);
         let latest_dependencies = dependencies
             .par_iter()
             .map(|dep| DependencyInfo {
@@ -175,15 +157,15 @@ impl EventHandler {
                 current: dep.current.clone(),
                 line_number: dep.line_number,
                 name: dep.name.clone(),
-                latest: self.npm.check_dependency(&dep),
+                latest: Npm::check_dependency(&dep),
             })
             .collect();
-        self.handle_generic(&latest_dependencies, nvim_session);
+        Self::handle_generic(&latest_dependencies, nvim_session);
 
         Ok(())
     }
 
-    fn handle_generic(&self, dependencies: &Vec<DependencyInfo>, nvim_session: &mut NeovimSession) {
+    fn handle_generic(dependencies: &Vec<DependencyInfo>, nvim_session: &mut NeovimSession) {
         for dep in dependencies {
             let mut lines: Vec<(String, String)> = vec![];
             if let Ok(requirement) = semver::VersionReq::parse(&dep.requirement) {
@@ -211,7 +193,7 @@ impl EventHandler {
         }
     }
 
-    fn recv(&self, nvim_session: &mut NeovimSession) {
+    fn recv(nvim_session: &mut NeovimSession) {
         let receiver = nvim_session.start_event_loop_channel();
 
         for (event, args) in receiver {
@@ -224,7 +206,7 @@ impl EventHandler {
                                 let lockfile_content =
                                     fs::read_to_string(file_path.replace(".toml", ".lock"))
                                         .unwrap_or("".to_string());
-                                match self.handle_cargo_toml(
+                                match Self::handle_cargo_toml(
                                     &content,
                                     &lockfile_content,
                                     nvim_session,
@@ -240,8 +222,11 @@ impl EventHandler {
                                 let lockfile_content =
                                     fs::read_to_string(format!("{}.lock", file_path))
                                         .unwrap_or("".to_string());
-                                match self.handle_pipfile(&content, &lockfile_content, nvim_session)
-                                {
+                                match Self::handle_pipfile(
+                                    &content,
+                                    &lockfile_content,
+                                    nvim_session,
+                                ) {
                                     Ok(_) => (),
                                     Err(error) => {
                                         nvim_session.echo(&error.to_string());
@@ -253,7 +238,7 @@ impl EventHandler {
                                     file_path.replace("package.json", "yarn.lock"),
                                 )
                                 .unwrap_or("".to_string());
-                                match self.handle_package_json(
+                                match Self::handle_package_json(
                                     &content,
                                     &lockfile_content,
                                     nvim_session,
@@ -278,6 +263,5 @@ impl EventHandler {
 
 pub fn run() {
     let mut nvim_session = NeovimSession::new();
-    let event_handler = EventHandler::new();
-    event_handler.recv(&mut nvim_session);
+    EventHandler::recv(&mut nvim_session);
 }

@@ -108,42 +108,37 @@ impl From<Cargolock> for Lockfile {
 }
 
 pub trait Parser {
-    fn new(manifest_content: &str, lockfile_content: &str) -> Self;
-    fn get_dependencies(&self) -> Result<Vec<DependencyInfo>, Error>;
-    fn parse_manifest(&self) -> Result<Manifest, Error>;
-    fn parse_lockfile(&self) -> Result<Lockfile, Error>;
+    fn get_dependencies(
+        manifest_content: &str,
+        lockfile_content: &str,
+    ) -> Result<Vec<DependencyInfo>, Error>;
+    fn parse_manifest(manifest_content: &str) -> Result<Manifest, Error>;
+    fn parse_lockfile(lockfile_content: &str) -> Result<Lockfile, Error>;
 }
 
-pub struct CargoParser {
-    manifest_content: String,
-    lockfile_content: String,
-}
+pub struct CargoParser;
 
 impl Parser for CargoParser {
-    fn new(manifest_content: &str, lockfile_content: &str) -> Self {
-        CargoParser {
-            manifest_content: manifest_content.to_string(),
-            lockfile_content: lockfile_content.to_string(),
-        }
+    fn parse_manifest(manifest_content: &str) -> Result<Manifest, Error> {
+        Ok(cargo_toml::Manifest::from_str(manifest_content)?.into())
     }
 
-    fn parse_manifest(&self) -> Result<Manifest, Error> {
-        Ok(cargo_toml::Manifest::from_str(&self.manifest_content)?.into())
-    }
-
-    fn parse_lockfile(&self) -> Result<Lockfile, Error> {
-        if self.lockfile_content == "" {
+    fn parse_lockfile(lockfile_content: &str) -> Result<Lockfile, Error> {
+        if lockfile_content == "" {
             return Ok(Lockfile {
                 dependencies: HashMap::new(),
             });
         }
-        let cargo_lock: Cargolock = toml::from_str(&self.lockfile_content)?;
+        let cargo_lock: Cargolock = toml::from_str(lockfile_content)?;
         Ok(cargo_lock.into())
     }
 
-    fn get_dependencies(&self) -> Result<Vec<DependencyInfo>, Error> {
-        let cargo_toml = self.parse_manifest()?;
-        let cargo_lock = self.parse_lockfile()?;
+    fn get_dependencies(
+        manifest_content: &str,
+        lockfile_content: &str,
+    ) -> Result<Vec<DependencyInfo>, Error> {
+        let cargo_toml = Self::parse_manifest(manifest_content)?;
+        let cargo_lock = Self::parse_lockfile(lockfile_content)?;
 
         // Concatenate all dependencie so we can parallelize network calls
         Ok(cargo_toml
@@ -151,7 +146,7 @@ impl Parser for CargoParser {
             .iter()
             .map(|(name, requirement)| {
                 let mut line_number: i64 = 0;
-                for (index, line) in self.manifest_content.split("\n").enumerate() {
+                for (index, line) in manifest_content.split("\n").enumerate() {
                     if line.to_string().starts_with(&format!("{} = ", name)) {
                         line_number = index as i64
                     }
@@ -178,30 +173,23 @@ impl Parser for CargoParser {
     }
 }
 
-pub struct PipfileParser {
-    manifest_content: String,
-    lockfile_content: String,
-}
+pub struct PipfileParser;
 
 impl Parser for PipfileParser {
-    fn new(manifest_content: &str, lockfile_content: &str) -> Self {
-        PipfileParser {
-            manifest_content: manifest_content.to_string(),
-            lockfile_content: lockfile_content.to_string(),
-        }
+    fn parse_manifest(manifest_content: &str) -> Result<Manifest, Error> {
+        Ok(pipfile::Pipfile::from_str(manifest_content)?.into())
     }
 
-    fn parse_manifest(&self) -> Result<Manifest, Error> {
-        Ok(pipfile::Pipfile::from_str(&self.manifest_content)?.into())
+    fn parse_lockfile(lockfile_content: &str) -> Result<Lockfile, Error> {
+        Ok(pipfile::Piplock::from_str(lockfile_content)?.into())
     }
 
-    fn parse_lockfile(&self) -> Result<Lockfile, Error> {
-        Ok(pipfile::Piplock::from_str(&self.lockfile_content)?.into())
-    }
-
-    fn get_dependencies(&self) -> Result<Vec<DependencyInfo>, Error> {
-        let pipfile = self.parse_manifest()?;
-        let piplock = match self.parse_lockfile() {
+    fn get_dependencies(
+        manifest_content: &str,
+        lockfile_content: &str,
+    ) -> Result<Vec<DependencyInfo>, Error> {
+        let pipfile = Self::parse_manifest(manifest_content)?;
+        let piplock = match Self::parse_lockfile(lockfile_content) {
             Ok(lock) => lock,
             Err(_) => Lockfile {
                 dependencies: HashMap::new(),
@@ -214,7 +202,7 @@ impl Parser for PipfileParser {
             .iter()
             .map(|(name, requirement)| {
                 let mut line_number: i64 = 0;
-                for (index, line) in self.manifest_content.split("\n").enumerate() {
+                for (index, line) in manifest_content.split("\n").enumerate() {
                     if line.to_string().starts_with(&format!("{} = ", name))
                         || line.to_string().starts_with(&format!("\"{}\" = ", name))
                     {
@@ -246,31 +234,24 @@ impl Parser for PipfileParser {
     }
 }
 
-pub struct PackageJsonParser {
-    manifest_content: String,
-    lockfile_content: String,
-}
+pub struct PackageJsonParser;
 
 impl Parser for PackageJsonParser {
-    fn new(manifest_content: &str, lockfile_content: &str) -> Self {
-        PackageJsonParser {
-            manifest_content: manifest_content.to_string(),
-            lockfile_content: lockfile_content.to_string(),
-        }
+    fn parse_manifest(manifest_content: &str) -> Result<Manifest, Error> {
+        Ok(package_json::PackageJson::from_str(manifest_content)?.into())
     }
 
-    fn parse_manifest(&self) -> Result<Manifest, Error> {
-        Ok(package_json::PackageJson::from_str(&self.manifest_content)?.into())
-    }
-
-    fn parse_lockfile(&self) -> Result<Lockfile, Error> {
-        let lock_file = package_json::YarnLock::from_str(&self.lockfile_content)?;
+    fn parse_lockfile(lockfile_content: &str) -> Result<Lockfile, Error> {
+        let lock_file = package_json::YarnLock::from_str(lockfile_content)?;
         Ok(lock_file.into())
     }
 
-    fn get_dependencies(&self) -> Result<Vec<DependencyInfo>, Error> {
-        let package_json = self.parse_manifest()?;
-        let yarn_lock = match self.parse_lockfile() {
+    fn get_dependencies(
+        manifest_content: &str,
+        lockfile_content: &str,
+    ) -> Result<Vec<DependencyInfo>, Error> {
+        let package_json = Self::parse_manifest(manifest_content)?;
+        let yarn_lock = match Self::parse_lockfile(lockfile_content) {
             Ok(lock) => lock,
             Err(_) => Lockfile {
                 dependencies: HashMap::new(),
@@ -283,7 +264,7 @@ impl Parser for PackageJsonParser {
             .iter()
             .map(|(name, requirement)| {
                 let mut line_number: i64 = 0;
-                for (index, line) in self.manifest_content.split("\n").enumerate() {
+                for (index, line) in manifest_content.split("\n").enumerate() {
                     if line.to_string().contains(&format!("\"{}\": \"", name)) {
                         line_number = index as i64
                     }
