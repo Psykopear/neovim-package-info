@@ -39,5 +39,5 @@ cd neovim-package-info
 
 ## TODO
 - [ ] Cache results for a while
-- [ ] Check requirement and highlight if currently installed package does not match
+- [x] Check requirement and highlight if currently installed package does not match
 - [ ] Make colors configurable
