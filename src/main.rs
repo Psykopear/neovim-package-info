@@ -1,3 +1,4 @@
+mod cache;
 mod consts;
 mod neovim;
 mod parser;

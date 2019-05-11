@@ -38,6 +38,6 @@ cd neovim-package-info
 ```
 
 ## TODO
-- [ ] Cache results for a while
+- [x] Cache results for a while
 - [x] Check requirement and highlight if currently installed package does not match
 - [ ] Make colors configurable

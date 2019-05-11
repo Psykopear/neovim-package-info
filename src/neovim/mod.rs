@@ -1,3 +1,4 @@
+use crate::cache::Cache;
 use crate::consts;
 use crate::parser::{CargoParser, PackageJsonParser, Parser, PipfileParser};
 use crate::store::{Cratesio, Npm, Pypi, Store};
@@ -6,7 +7,6 @@ use neovim_lib::neovim_api::Buffer;
 use neovim_lib::{Neovim, NeovimApi, Session, Value};
 use rayon::prelude::*;
 use semver;
-use std::collections::HashMap;
 use std::fs;
 
 pub struct DependencyInfo {
@@ -103,32 +103,11 @@ impl EventHandler {
         content: &str,
         lockfile_content: &str,
         nvim_session: &mut NeovimSession,
-        cache: &mut HashMap<String, Vec<(String, String)>>,
+        mut cache: &mut Cache,
     ) -> Result<(), Error> {
         let dependencies: Vec<DependencyInfo> =
             CargoParser::get_dependencies(&content, &lockfile_content)?;
-        let dependencies = dependencies
-            .into_iter()
-            .filter(|dep| !cache.contains_key(&dep.name))
-            .collect();
-        Self::handle_generic(&dependencies, nvim_session);
-        let latest_dependencies: Vec<DependencyInfo> = dependencies
-            .par_iter()
-            .map(|dep| DependencyInfo {
-                requirement: dep.requirement.clone(),
-                current: dep.current.clone(),
-                line_number: dep.line_number,
-                name: dep.name.clone(),
-                latest: match cache.get(&dep.name) {
-                    Some(latest) => latest.clone(),
-                    None => Cratesio::check_dependency(&dep),
-                },
-            })
-            .collect();
-        for dep in latest_dependencies.iter() {
-            cache.insert(dep.name.clone(), dep.latest.clone());
-        }
-        Self::handle_generic(&latest_dependencies, nvim_session);
+        Self::handle_generic(&dependencies, &mut cache, nvim_session, Cratesio);
         Ok(())
     }
 
@@ -136,32 +115,11 @@ impl EventHandler {
         content: &str,
         lockfile_content: &str,
         nvim_session: &mut NeovimSession,
-        cache: &mut HashMap<String, Vec<(String, String)>>,
+        mut cache: &mut Cache,
     ) -> Result<(), Error> {
         let dependencies: Vec<DependencyInfo> =
             PipfileParser::get_dependencies(&content, &lockfile_content)?;
-        let dependencies = dependencies
-            .into_iter()
-            .filter(|dep| !cache.contains_key(&dep.name))
-            .collect();
-        Self::handle_generic(&dependencies, nvim_session);
-        let latest_dependencies: Vec<DependencyInfo> = dependencies
-            .par_iter()
-            .map(|dep| DependencyInfo {
-                requirement: dep.requirement.clone(),
-                current: dep.current.clone(),
-                line_number: dep.line_number,
-                name: dep.name.clone(),
-                latest: match cache.get(&dep.name) {
-                    Some(latest) => latest.clone(),
-                    None => Pypi::check_dependency(&dep),
-                },
-            })
-            .collect();
-        for dep in latest_dependencies.iter() {
-            cache.insert(dep.name.clone(), dep.latest.clone());
-        }
-        Self::handle_generic(&latest_dependencies, nvim_session);
+        Self::handle_generic(&dependencies, &mut cache, nvim_session, Pypi);
         Ok(())
     }
 
@@ -169,37 +127,31 @@ impl EventHandler {
         content: &str,
         lockfile_content: &str,
         nvim_session: &mut NeovimSession,
-        cache: &mut HashMap<String, Vec<(String, String)>>,
+        mut cache: &mut Cache,
     ) -> Result<(), Error> {
         let dependencies: Vec<DependencyInfo> =
             PackageJsonParser::get_dependencies(&content, &lockfile_content)?;
+        Self::handle_generic(&dependencies, &mut cache, nvim_session, Npm);
+        Ok(())
+    }
+
+    fn handle_generic<T: Store>(
+        dependencies: &Vec<DependencyInfo>,
+        cache: &mut Cache,
+        nvim_session: &mut NeovimSession,
+        _: T,
+    ) {
         let dependencies = dependencies
-            .into_iter()
-            .filter(|dep| !cache.contains_key(&dep.name))
-            .collect();
-        Self::handle_generic(&dependencies, nvim_session);
-        let latest_dependencies: Vec<DependencyInfo> = dependencies
             .par_iter()
             .map(|dep| DependencyInfo {
                 requirement: dep.requirement.clone(),
                 current: dep.current.clone(),
                 line_number: dep.line_number,
                 name: dep.name.clone(),
-                latest: match cache.get(&dep.name) {
-                    Some(latest) => latest.clone(),
-                    None => Npm::check_dependency(&dep),
-                },
+                latest: cache.get(&dep, &<T as Store>::check_dependency),
             })
             .collect();
-        for dep in latest_dependencies.iter() {
-            cache.insert(dep.name.clone(), dep.latest.clone());
-        }
-        Self::handle_generic(&latest_dependencies, nvim_session);
-
-        Ok(())
-    }
-
-    fn handle_generic(dependencies: &Vec<DependencyInfo>, nvim_session: &mut NeovimSession) {
+        cache.update(&dependencies);
         for dep in dependencies {
             let mut lines: Vec<(String, String)> = vec![];
             match semver::VersionReq::parse(&dep.requirement) {
@@ -234,9 +186,9 @@ impl EventHandler {
 
     fn recv(nvim_session: &mut NeovimSession) {
         let receiver = nvim_session.start_event_loop_channel();
-        let mut cargo_cache: HashMap<String, Vec<(String, String)>> = HashMap::new();
-        let mut pypi_cache: HashMap<String, Vec<(String, String)>> = HashMap::new();
-        let mut npm_cache: HashMap<String, Vec<(String, String)>> = HashMap::new();
+        let mut cargo_cache: Cache = Cache::new(30);
+        let mut pypi_cache: Cache = Cache::new(30);
+        let mut npm_cache: Cache = Cache::new(30);
 
         for (event, args) in receiver {
             nvim_session.buffer_number = match args[1].as_i64() {
