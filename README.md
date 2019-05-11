@@ -41,3 +41,5 @@ cd neovim-package-info
 - [x] Cache results for a while
 - [x] Check requirement and highlight if currently installed package does not match
 - [ ] Make colors configurable
+- [ ] Make it installable with plugin managers
+- [ ] Use a gif to showcase the plugin
