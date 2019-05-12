@@ -21,6 +21,8 @@ After that it will query the registry to retrieve the latest available version, 
 it will print and hihglight it next to the current one.
 
 ## Installation
+You will need cargo in th path and the latest stable version of rust.
+
 Using vim-plug:
 ```
 Plug 'Psykopear/neovim-package-info', { 'do': './install.sh' }
