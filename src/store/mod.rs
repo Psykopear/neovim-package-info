@@ -54,12 +54,12 @@ pub trait Store {
             Err(_) => return vec![(format!(" {}", store_version), consts::GREY_HG.to_string())],
         };
 
-        if latest_version.major > current.major {
+        if latest_version.major != current.major {
             vec![(
                 format!(" -> {}", latest_version),
                 consts::RED_HG.to_string(),
             )]
-        } else if latest_version.minor > current.minor {
+        } else if latest_version.minor != current.minor {
             let split: Vec<String> = latest_version
                 .to_string()
                 .split('.')
@@ -72,7 +72,7 @@ pub trait Store {
                 ),
                 (split[1..].join("."), consts::BLUE_HG.to_string()),
             ]
-        } else if latest_version.patch > current.patch {
+        } else if latest_version.patch != current.patch {
             let split: Vec<String> = latest_version
                 .to_string()
                 .split('.')
