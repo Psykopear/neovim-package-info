@@ -24,9 +24,10 @@ pub trait Store {
     // A method to retrieve the last version of a package given its name in the store
     fn get_max_version(package: &str) -> Result<String, Error>;
 
-    // Methods to access the structure's fields
+    /* This should return the full url containing the keyword "{package}"
+     * where the package name should be placed in the url (see get_package_info)
+     */
     fn get_url() -> String;
-    fn get_name() -> String;
 
     // Check dependency and return a string
     fn check_dependency(dep: &DependencyInfo) -> Vec<(String, String)> {

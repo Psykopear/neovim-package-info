@@ -8,10 +8,6 @@ impl Store for Pypi {
         "https://pypi.org/pypi/{package}/json".to_string()
     }
 
-    fn get_name() -> String {
-        "pypi.org".to_string()
-    }
-
     fn get_max_version(package: &str) -> Result<String, Error> {
         let body = Self::get_package_info(package)?;
         if let Some(res) = body["info"]["version"].as_str() {

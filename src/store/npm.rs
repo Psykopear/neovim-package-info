@@ -8,10 +8,6 @@ impl Store for Npm {
         "https://registry.npmjs.org/{package}".to_string()
     }
 
-    fn get_name() -> String {
-        "npmjs.org".to_string()
-    }
-
     fn get_max_version(package: &str) -> Result<String, Error> {
         let body = Self::get_package_info(package)?;
 

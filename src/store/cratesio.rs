@@ -8,10 +8,6 @@ impl Store for Cratesio {
         "https://crates.io/api/v1/crates/{package}".to_string()
     }
 
-    fn get_name() -> String {
-        "crates.io".to_string()
-    }
-
     fn get_max_version(package: &str) -> Result<String, Error> {
         let body = Self::get_package_info(package)?;
         if let Some(max_version) = body["crate"]["max_version"].as_str() {
