@@ -1,4 +1,5 @@
-use crate::neovim::DependencyInfo;
+use super::DependencyInfo;
+
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 

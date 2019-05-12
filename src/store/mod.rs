@@ -1,9 +1,17 @@
+mod cratesio;
+mod npm;
+mod pypi;
+
 use crate::consts;
 use crate::neovim::DependencyInfo;
 use failure::Error;
 use reqwest;
 use semver;
 use serde_json;
+
+pub use cratesio::Cratesio;
+pub use npm::Npm;
+pub use pypi::Pypi;
 
 pub trait Store {
     // A method to retrieve package info given base_url and package name
@@ -77,81 +85,7 @@ pub trait Store {
                 (split[2..].join("."), "String".to_string()),
             ]
         } else {
-            // vec![(format!("{}", latest_version), consts::GREY_HG.to_string())]
             vec![]
-        }
-    }
-}
-
-////////////////////////////////////
-// crates.io Store implementation //
-////////////////////////////////////
-pub struct Cratesio;
-
-impl Store for Cratesio {
-    fn get_url() -> String {
-        "https://crates.io/api/v1/crates/{package}".to_string()
-    }
-
-    fn get_name() -> String {
-        "crates.io".to_string()
-    }
-
-    fn get_max_version(package: &str) -> Result<String, Error> {
-        let body = Self::get_package_info(package)?;
-        if let Some(max_version) = body["crate"]["max_version"].as_str() {
-            Ok(max_version.to_string())
-        } else {
-            Ok("Can't find version".to_string())
-        }
-    }
-}
-
-///////////////////////////////
-// Pypi Store implementation //
-///////////////////////////////
-pub struct Pypi;
-
-impl Store for Pypi {
-    fn get_url() -> String {
-        "https://pypi.org/pypi/{package}/json".to_string()
-    }
-
-    fn get_name() -> String {
-        "pypi.org".to_string()
-    }
-
-    fn get_max_version(package: &str) -> Result<String, Error> {
-        let body = Self::get_package_info(package)?;
-        if let Some(res) = body["info"]["version"].as_str() {
-            Ok(res.to_string())
-        } else {
-            Ok("Can't find version".to_string())
-        }
-    }
-}
-
-//////////////////////////////
-// NPM Store implementation //
-//////////////////////////////
-pub struct Npm;
-
-impl Store for Npm {
-    fn get_url() -> String {
-        "https://registry.npmjs.org/{package}".to_string()
-    }
-
-    fn get_name() -> String {
-        "npmjs.org".to_string()
-    }
-
-    fn get_max_version(package: &str) -> Result<String, Error> {
-        let body = Self::get_package_info(package)?;
-
-        if let Some(res) = body["dist-tags"]["latest"].as_str() {
-            Ok(res.to_string())
-        } else {
-            Ok("Can't find version".to_string())
         }
     }
 }
