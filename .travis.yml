@@ -3,8 +3,8 @@ rust:
   - stable
 cache: cargo
 script:
-  - cargo build --release --verbose --all
-  - cargo test --verbose --all
+  - cargo build --release --all
+  - cargo test --all
 deploy:
   provider: releases
   api_key:
@@ -12,4 +12,16 @@ deploy:
   file: target/release/neovim-package-info
   skip_cleanup: true
   on:
+    tags: true
     repo: Psykopear/neovim-package-info
+
+matrix:
+  include:
+    # Linux
+    - env: TARGET=x86_64-unknown-linux-gnu
+
+branches:
+  only:
+    # release tags
+    - /^v\d+\.\d+\.\d+.*$/
+    - master
