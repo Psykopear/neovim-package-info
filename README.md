@@ -21,23 +21,16 @@ After that it will query the registry to retrieve the latest available version, 
 it will print and hihglight it next to the current one.
 
 ## Installation
-Since I want to finish a couple of things before studying how to make a repo installable by neovim package managers, the process is manual right now.
-
-Assumptions:
-- `~/.local/bin/` should exist and be in `$PATH`
-- `~/.config/nvim/plugin/` also should exist (and `~/.config/nvim` should be the neovim config directory
-
-**Read the script before running it!**
-
+Using vim-plug:
 ```
-git clone github.com/psykopear/neovim-package-info
-cd neovim-package-info
-./install.sh
+Plug 'Psykopear/neovim-package-info', { 'do': './install.sh' }
 ```
+
+Should be similar for other package managers
 
 ## TODO
 - [x] Cache results for a while
 - [x] Check requirement and highlight if currently installed package does not match
 - [ ] Make colors configurable
-- [ ] Make it installable with plugin managers
+- [x] Make it installable with plugin managers
 - [x] Use a gif to showcase the plugin
