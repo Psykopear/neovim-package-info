@@ -3,7 +3,7 @@ if !exists('s:packageInfoJobId')
     let s:packageInfoJobId = 0
 endif
 
-let s:bin = expand('%:p:h/neovim-package-info')
+let s:bin = resolve(expand('<sfile>:p:h')) . '/neovim-package-info'
 
 let s:cargoToml = 'cargo-toml'
 let s:packageJson = 'package-json'
