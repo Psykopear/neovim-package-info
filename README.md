@@ -18,10 +18,10 @@ look for a lockfile (only works with `yarn.lock` for js right now), then print t
 dependency line in the manifest file.
 
 After that it will query the registry to retrieve the latest available version, and if there is a more recent one
-it will print and hihglight it next to the current one.
+it will print and highlight it next to the current one.
 
 ## Installation
-You will need cargo in th path and the latest stable version of rust.
+You will need cargo in the path and the latest stable version of rust.
 
 Using vim-plug:
 ```
