@@ -21,7 +21,7 @@ After that it will query the registry to retrieve the latest available version, 
 it will print and highlight it next to the current one.
 
 ## Installation
-You will need cargo in the path and the latest stable version of rust.
+You will need wget to download the binary, so you won't have to build it yourself.
 
 Using vim-plug:
 ```
