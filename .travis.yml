@@ -19,9 +19,3 @@ matrix:
   include:
     # Linux
     - env: TARGET=x86_64-unknown-linux-gnu
-
-branches:
-  only:
-    # release tags
-    - /^v\d+\.\d+\.\d+.*$/
-    - master
