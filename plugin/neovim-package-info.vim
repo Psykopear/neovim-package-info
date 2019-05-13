@@ -3,7 +3,7 @@ if !exists('s:packageInfoJobId')
     let s:packageInfoJobId = 0
 endif
 
-let s:bin = expand('$HOME/.local/bin/package-info-rs')
+let s:bin = expand('%:p:h/neovim-package-info')
 
 let s:cargoToml = 'cargo-toml'
 let s:packageJson = 'package-json'
@@ -46,9 +46,9 @@ function! s:connect()
   let id = s:initRpc()
 
   if 0 == id
-    echoerr "package-info-rs: cannot start rpc process"
+    echoerr "neovim-package-info: cannot start rpc process"
   elseif -1 == id
-    echoerr "package-info-rs: rpc process is not executable"
+    echoerr "neovim-package-info: rpc process is not executable"
   else
     let s:packageInfoJobId = id
     call s:configureCommands()
